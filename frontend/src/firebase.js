@@ -1,0 +1,260 @@
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  addDoc
+} from "firebase/firestore";
+
+// TODO: Reemplaza esta configuración con la de tu proyecto de Firebase
+// Puedes encontrarla en la consola de Firebase -> Project Settings -> General -> Your apps
+const firebaseConfig = {
+  apiKey: "AIzaSyDOWb_8kdq1kX_xAAgpJP5bfV_MuvK9qT8",
+  authDomain: "taskflow-app-2cb58.firebaseapp.com",
+  projectId: "taskflow-app-2cb58",
+  storageBucket: "taskflow-app-2cb58.firebasestorage.app",
+  messagingSenderId: "661354487895",
+  appId: "1:661354487895:web:28274f1ceb04059c950312",
+  measurementId: "G-QFP30K4889"
+};
+
+
+// Verifica si la configuración es válida (para evitar crasheos si no se ha configurado)
+const isConfigured = firebaseConfig.apiKey !== "TU_API_KEY";
+
+let app, db;
+
+if (isConfigured) {
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+}
+
+// Simulador de Base de datos en LocalStorage (Solo activo si Firebase no está configurado)
+// Esto permite que pruebes la app inmediatamente sin configurar Firebase todavía.
+class LocalStore {
+  constructor() {
+    this.storage = window.localStorage;
+    if (!this.storage.getItem('projects')) this.storage.setItem('projects', JSON.stringify({}));
+    if (!this.storage.getItem('activities')) this.storage.setItem('activities', JSON.stringify({}));
+  }
+
+  // Helpers para simular las llamadas asíncronas de Firebase
+  async get(col, id) {
+    const data = JSON.parse(this.storage.getItem(col));
+    return data[id] ? { id, data: () => data[id], exists: () => true } : { exists: () => false };
+  }
+
+  async query(col, field, value) {
+    const data = JSON.parse(this.storage.getItem(col));
+    return { docs: Object.entries(data).filter(([_, v]) => v[field] === value).map(([k, v]) => ({ id: k, data: () => v })) };
+  }
+
+  async set(col, id, obj) {
+    const data = JSON.parse(this.storage.getItem(col));
+    data[id] = { ...obj, id }; // Asegurar que el id esté
+    this.storage.setItem(col, JSON.stringify(data));
+  }
+
+  async update(col, id, obj) {
+    const data = JSON.parse(this.storage.getItem(col));
+    if (data[id]) {
+      data[id] = { ...data[id], ...obj };
+      this.storage.setItem(col, JSON.stringify(data));
+    }
+  }
+
+  async delete(col, id) {
+    const data = JSON.parse(this.storage.getItem(col));
+    delete data[id];
+    this.storage.setItem(col, JSON.stringify(data));
+  }
+
+  // Simulador de onSnapshot (solo lee la vez inicial para el prototipo, requeriría recarga para ver cambios si se usa local)
+  onSnapshotMock(col, field, value, callback) {
+    this.query(col, field, value).then(res => {
+      callback({ docs: res.docs });
+    });
+    // Agregamos un listener de storage para cross-tab sync si estamos en otra pestaña
+    const listener = (e) => {
+      if (e.key === col) {
+        this.query(col, field, value).then(res => callback({ docs: res.docs }));
+      }
+    };
+    window.addEventListener('storage', listener);
+    return () => window.removeEventListener('storage', listener);
+  }
+}
+
+const localDb = new LocalStore();
+
+// Generador de códigos aleatorios
+const generateCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+const generateId = () => Math.random().toString(36).substring(2, 15);
+
+export const dbService = {
+  createProject: async (name, leaderId) => {
+    const joinCode = generateCode();
+    const projectData = {
+      name,
+      joinCode,
+      leaderId,
+      helpers: [],
+      createdAt: Date.now()
+    };
+
+    if (isConfigured) {
+      const docRef = doc(collection(db, "projects"));
+      await setDoc(docRef, projectData);
+      return { id: docRef.id, ...projectData };
+    } else {
+      const id = generateId();
+      await localDb.set('projects', id, projectData);
+      return { id, ...projectData };
+    }
+  },
+
+  joinProject: async (joinCode, helperId, helperName) => {
+    if (isConfigured) {
+      const q = query(collection(db, "projects"), where("joinCode", "==", joinCode));
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) throw new Error("Código de proyecto inválido");
+
+      const projectDoc = querySnapshot.docs[0];
+      const projectData = projectDoc.data();
+
+      // Añadir ayudante si no existe
+      if (!projectData.helpers.find(h => h.id === helperId)) {
+        const helpers = [...projectData.helpers, { id: helperId, name: helperName }];
+        await updateDoc(doc(db, "projects", projectDoc.id), { helpers });
+      }
+      return { id: projectDoc.id, ...projectData };
+    } else {
+      const q = await localDb.query('projects', 'joinCode', joinCode);
+      if (q.docs.length === 0) throw new Error("Código de proyecto inválido");
+
+      const projectDoc = q.docs[0];
+      const projectData = projectDoc.data();
+      if (!projectData.helpers.find(h => h.id === helperId)) {
+        const helpers = [...projectData.helpers, { id: helperId, name: helperName }];
+        await localDb.update('projects', projectDoc.id, { helpers });
+      }
+      return { id: projectDoc.id, ...projectData };
+    }
+  },
+
+  getProjectsForLeader: async (leaderId) => {
+    if (isConfigured) {
+      const q = query(collection(db, "projects"), where("leaderId", "==", leaderId));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      const q = await localDb.query('projects', 'leaderId', leaderId);
+      return q.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+  },
+
+  getProjectsForHelper: async (helperId) => {
+    // Para simplificar, obtenemos todos los locales y filtramos
+    if (isConfigured) {
+      // Firebase array-contains
+      const snap = await getDocs(collection(db, "projects"));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.helpers?.some(h => h.id === helperId));
+    } else {
+      const data = JSON.parse(localDb.storage.getItem('projects'));
+      return Object.values(data).filter(p => p.helpers?.some(h => h.id === helperId));
+    }
+  },
+
+  createActivity: async (projectId, title, description, assignedTo = null) => {
+    const actData = {
+      projectId,
+      title,
+      description,
+      assignedTo,
+      status: 'pending',
+      createdAt: Date.now(),
+      completedAt: null,
+      timeTakenMs: null
+    };
+
+    if (isConfigured) {
+      const docRef = doc(collection(db, "activities"));
+      await setDoc(docRef, actData);
+    } else {
+      await localDb.set('activities', generateId(), actData);
+    }
+  },
+
+  subscribeToActivities: (projectId, callback) => {
+    if (isConfigured) {
+      const q = query(collection(db, "activities"), where("projectId", "==", projectId));
+      return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    } else {
+      return localDb.onSnapshotMock('activities', 'projectId', projectId, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
+  },
+
+  updateActivity: async (activityId, updates) => {
+    if (isConfigured) {
+      await updateDoc(doc(db, "activities", activityId), updates);
+    } else {
+      await localDb.update('activities', activityId, updates);
+    }
+  },
+
+  completeActivity: async (activity) => {
+    const completedAt = Date.now();
+    const timeTakenMs = completedAt - activity.createdAt;
+
+    if (isConfigured) {
+      await updateDoc(doc(db, "activities", activity.id), {
+        status: 'completed',
+        completedAt,
+        timeTakenMs
+      });
+    } else {
+      await localDb.update('activities', activity.id, {
+        status: 'completed',
+        completedAt,
+        timeTakenMs
+      });
+    }
+  },
+
+  deleteActivity: async (activityId) => {
+    if (isConfigured) {
+      await deleteDoc(doc(db, "activities", activityId));
+    } else {
+      await localDb.delete('activities', activityId);
+    }
+  },
+
+  deleteProject: async (projectId) => {
+    if (isConfigured) {
+      // Borrar todas las actividades primero
+      const q = query(collection(db, "activities"), where("projectId", "==", projectId));
+      const snap = await getDocs(q);
+      const deletePromises = snap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(deletePromises);
+      // Luego borrar el proyecto
+      await deleteDoc(doc(db, "projects", projectId));
+    } else {
+      const acts = await localDb.query('activities', 'projectId', projectId);
+      acts.docs.forEach(d => localDb.delete('activities', d.id));
+      await localDb.delete('projects', projectId);
+    }
+  }
+};
