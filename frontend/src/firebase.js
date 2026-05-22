@@ -14,6 +14,13 @@ import {
   serverTimestamp,
   addDoc
 } from "firebase/firestore";
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  updateProfile,
+  signOut
+} from "firebase/auth";
 
 // TODO: Reemplaza esta configuración con la de tu proyecto de Firebase
 // Puedes encontrarla en la consola de Firebase -> Project Settings -> General -> Your apps
@@ -31,11 +38,12 @@ const firebaseConfig = {
 // Verifica si la configuración es válida (para evitar crasheos si no se ha configurado)
 const isConfigured = firebaseConfig.apiKey !== "TU_API_KEY";
 
-let app, db;
+let app, db, auth;
 
 if (isConfigured) {
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
+  auth = getAuth(app);
 }
 
 // Simulador de Base de datos en LocalStorage (Solo activo si Firebase no está configurado)
@@ -101,18 +109,21 @@ const localDb = new LocalStore();
 const generateCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
+export { auth };
+
 export const authService = {
   register: async (email, password, name) => {
     if (isConfigured) {
-      // Usar firestore para usuarios (simulado simple si no se usa auth)
-      const q = query(collection(db, "users"), where("email", "==", email));
-      const snap = await getDocs(q);
-      if (!snap.empty) throw new Error("El correo ya está registrado");
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // Actualizar el perfil con el nombre
+      await updateProfile(userCredential.user, { displayName: name });
       
-      const docRef = doc(collection(db, "users"));
-      const userData = { email, password, name, createdAt: Date.now() };
+      // Guardar información adicional en firestore, PERO SIN CONTRASEÑA
+      const docRef = doc(db, "users", userCredential.user.uid);
+      const userData = { email, name, createdAt: Date.now() };
       await setDoc(docRef, userData);
-      return { id: docRef.id, name, email };
+      
+      return { id: userCredential.user.uid, name, email };
     } else {
       const q = await localDb.query('users', 'email', email);
       if (q.docs.length > 0) throw new Error("El correo ya está registrado");
@@ -125,16 +136,22 @@ export const authService = {
   },
   login: async (email, password) => {
     if (isConfigured) {
-      const q = query(collection(db, "users"), where("email", "==", email), where("password", "==", password));
-      const snap = await getDocs(q);
-      if (snap.empty) throw new Error("Credenciales inválidas");
-      const userDoc = snap.docs[0];
-      return { id: userDoc.id, name: userDoc.data().name, email: userDoc.data().email };
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      return { 
+        id: userCredential.user.uid, 
+        name: userCredential.user.displayName, 
+        email: userCredential.user.email 
+      };
     } else {
       const q = await localDb.query('users', 'email', email);
       const user = q.docs.find(d => d.data().password === password);
       if (!user) throw new Error("Credenciales inválidas");
       return { id: user.id, name: user.data().name, email: user.data().email };
+    }
+  },
+  logout: async () => {
+    if (isConfigured) {
+      await signOut(auth);
     }
   }
 };
