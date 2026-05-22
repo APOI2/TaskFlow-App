@@ -162,6 +162,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
       title: editActModal.title,
       description: editActModal.description,
       type: editActModal.type,
+      assignedTo: editActModal.assignedTo || null,
       targetAmount: editActModal.type === 'numerical' ? Number(editActModal.targetAmount) : null,
       deadline: editActModal.deadline ? new Date(editActModal.deadline).getTime() : null,
     };
@@ -364,72 +365,79 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
             <button className="modal-close" onClick={() => setShowNewActModal(false)}>✕</button>
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Nuevo Objetivo</h3>
             <form onSubmit={handleCreateActivity}>
-              <div className="form-group">
-                <label>Título del objetivo</label>
-                <input 
-                  type="text" 
-                  className="input-field" 
-                  value={newAct.title}
-                  onChange={e => setNewAct({...newAct, title: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Descripción (opcional)</label>
-                <textarea 
-                  className="input-field" 
-                  rows="2"
-                  value={newAct.description}
-                  onChange={e => setNewAct({...newAct, description: e.target.value})}
-                ></textarea>
-              </div>
-              <div className="form-group">
-                <label>Tipo de Objetivo</label>
-                <select 
-                  className="input-field select-field"
-                  value={newAct.type}
-                  onChange={e => setNewAct({...newAct, type: e.target.value})}
-                >
-                  <option value="normal">Normal (Checkbox)</option>
-                  <option value="numerical">Numérico (Cantidad)</option>
-                </select>
-              </div>
-              {newAct.type === 'numerical' && (
-                <div className="form-group">
-                  <label>Meta Numérica</label>
-                  <input 
-                    type="number" 
-                    className="input-field" 
-                    min="1"
-                    value={newAct.targetAmount}
-                    onChange={e => setNewAct({...newAct, targetAmount: e.target.value})}
-                    required
-                  />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Título del objetivo</label>
+                    <input 
+                      type="text" 
+                      className="input-field" 
+                      value={newAct.title}
+                      onChange={e => setNewAct({...newAct, title: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Descripción (opcional)</label>
+                    <textarea 
+                      className="input-field" 
+                      rows="2"
+                      value={newAct.description}
+                      onChange={e => setNewAct({...newAct, description: e.target.value})}
+                    ></textarea>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Tipo de Objetivo</label>
+                    <select 
+                      className="input-field select-field"
+                      value={newAct.type}
+                      onChange={e => setNewAct({...newAct, type: e.target.value})}
+                    >
+                      <option value="normal">Normal (Checkbox)</option>
+                      <option value="numerical">Numérico (Cantidad)</option>
+                    </select>
+                  </div>
                 </div>
-              )}
-              <div className="form-group">
-                <label>Fecha Límite (opcional)</label>
-                <input 
-                  type="datetime-local" 
-                  className="input-field" 
-                  value={newAct.deadline}
-                  onChange={e => setNewAct({...newAct, deadline: e.target.value})}
-                />
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {newAct.type === 'numerical' && (
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Meta Numérica</label>
+                      <input 
+                        type="number" 
+                        className="input-field" 
+                        min="1"
+                        value={newAct.targetAmount}
+                        onChange={e => setNewAct({...newAct, targetAmount: e.target.value})}
+                        required
+                      />
+                    </div>
+                  )}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Fecha Límite (opcional)</label>
+                    <input 
+                      type="datetime-local" 
+                      className="input-field" 
+                      value={newAct.deadline}
+                      onChange={e => setNewAct({...newAct, deadline: e.target.value})}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Asignar a (opcional)</label>
+                    <select 
+                      className="input-field select-field"
+                      value={newAct.assignedTo}
+                      onChange={e => setNewAct({...newAct, assignedTo: e.target.value})}
+                    >
+                      <option value="">-- Sin asignar --</option>
+                      {project?.helpers?.map(h => (
+                        <option key={h.id} value={h.id}>{h.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div className="form-group">
-                <label>Asignar a (opcional)</label>
-                <select 
-                  className="input-field select-field"
-                  value={newAct.assignedTo}
-                  onChange={e => setNewAct({...newAct, assignedTo: e.target.value})}
-                >
-                  <option value="">-- Sin asignar --</option>
-                  {project?.helpers?.map(h => (
-                    <option key={h.id} value={h.id}>{h.name}</option>
-                  ))}
-                </select>
-              </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Crear Objetivo</button>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }}>Crear Objetivo</button>
             </form>
           </div>
         </div>
@@ -442,59 +450,79 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
             <button className="modal-close" onClick={() => setEditActModal(null)}>✕</button>
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Editar Objetivo</h3>
             <form onSubmit={handleEditActivity}>
-              <div className="form-group">
-                <label>Título</label>
-                <input 
-                  type="text" 
-                  className="input-field" 
-                  value={editActModal.title}
-                  onChange={e => setEditActModal({...editActModal, title: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Descripción</label>
-                <textarea 
-                  className="input-field" 
-                  rows="2"
-                  value={editActModal.description || ''}
-                  onChange={e => setEditActModal({...editActModal, description: e.target.value})}
-                ></textarea>
-              </div>
-              <div className="form-group">
-                <label>Tipo de Objetivo</label>
-                <select 
-                  className="input-field select-field"
-                  value={editActModal.type}
-                  onChange={e => setEditActModal({...editActModal, type: e.target.value})}
-                >
-                  <option value="normal">Normal (Checkbox)</option>
-                  <option value="numerical">Numérico (Cantidad)</option>
-                </select>
-              </div>
-              {editActModal.type === 'numerical' && (
-                <div className="form-group">
-                  <label>Meta Numérica</label>
-                  <input 
-                    type="number" 
-                    className="input-field" 
-                    min="1"
-                    value={editActModal.targetAmount || ''}
-                    onChange={e => setEditActModal({...editActModal, targetAmount: e.target.value})}
-                    required
-                  />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Título</label>
+                    <input 
+                      type="text" 
+                      className="input-field" 
+                      value={editActModal.title}
+                      onChange={e => setEditActModal({...editActModal, title: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Descripción</label>
+                    <textarea 
+                      className="input-field" 
+                      rows="2"
+                      value={editActModal.description || ''}
+                      onChange={e => setEditActModal({...editActModal, description: e.target.value})}
+                    ></textarea>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Tipo de Objetivo</label>
+                    <select 
+                      className="input-field select-field"
+                      value={editActModal.type}
+                      onChange={e => setEditActModal({...editActModal, type: e.target.value})}
+                    >
+                      <option value="normal">Normal (Checkbox)</option>
+                      <option value="numerical">Numérico (Cantidad)</option>
+                    </select>
+                  </div>
                 </div>
-              )}
-              <div className="form-group">
-                <label>Fecha Límite (opcional)</label>
-                <input 
-                  type="datetime-local" 
-                  className="input-field" 
-                  value={editActModal.deadline || ''}
-                  onChange={e => setEditActModal({...editActModal, deadline: e.target.value})}
-                />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {editActModal.type === 'numerical' && (
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Meta Numérica</label>
+                      <input 
+                        type="number" 
+                        className="input-field" 
+                        min="1"
+                        value={editActModal.targetAmount || ''}
+                        onChange={e => setEditActModal({...editActModal, targetAmount: e.target.value})}
+                        required
+                      />
+                    </div>
+                  )}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Fecha Límite (opcional)</label>
+                    <input 
+                      type="datetime-local" 
+                      className="input-field" 
+                      value={editActModal.deadline || ''}
+                      onChange={e => setEditActModal({...editActModal, deadline: e.target.value})}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Asignar a (opcional)</label>
+                    <select 
+                      className="input-field select-field"
+                      value={editActModal.assignedTo || ''}
+                      onChange={e => setEditActModal({...editActModal, assignedTo: e.target.value})}
+                    >
+                      <option value="">-- Sin asignar --</option>
+                      {project?.helpers?.map(h => (
+                        <option key={h.id} value={h.id}>{h.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Guardar Cambios</button>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }}>Guardar Cambios</button>
             </form>
           </div>
         </div>
