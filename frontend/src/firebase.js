@@ -54,7 +54,7 @@ class LocalStore {
     if (!this.storage.getItem('projects')) this.storage.setItem('projects', JSON.stringify({}));
     if (!this.storage.getItem('activities')) this.storage.setItem('activities', JSON.stringify({}));
     if (!this.storage.getItem('users')) this.storage.setItem('users', JSON.stringify({}));
-    if (!this.storage.getItem('routines')) this.storage.setItem('routines', JSON.stringify({}));
+    if (!this.storage.getItem('projectRoutines')) this.storage.setItem('projectRoutines', JSON.stringify({}));
   }
 
   // Helpers para simular las llamadas asíncronas de Firebase
@@ -315,32 +315,73 @@ export const dbService = {
     }
   },
 
-  createRoutine: async (projectId, title, description, type = 'normal', targetAmount = null) => {
-    const routineData = { projectId, title, description, type, targetAmount, createdAt: Date.now() };
+  getActivitiesForProject: async (projectId) => {
     if (isConfigured) {
-      const docRef = doc(collection(db, "routines"));
-      await setDoc(docRef, routineData);
+      const q = query(collection(db, "activities"), where("projectId", "==", projectId));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } else {
-      await localDb.set('routines', generateId(), routineData);
+      const q = await localDb.query('activities', 'projectId', projectId);
+      return q.docs.map(d => ({ id: d.id, ...d.data() }));
     }
   },
 
-  subscribeToRoutines: (projectId, callback) => {
+  createProjectRoutine: async (leaderId, projectName, activities) => {
+    const routineData = { leaderId, name: projectName, activities, createdAt: Date.now() };
     if (isConfigured) {
-      const q = query(collection(db, "routines"), where("projectId", "==", projectId));
+      const docRef = doc(collection(db, "projectRoutines"));
+      await setDoc(docRef, routineData);
+    } else {
+      await localDb.set('projectRoutines', generateId(), routineData);
+    }
+  },
+
+  subscribeToProjectRoutines: (leaderId, callback) => {
+    if (isConfigured) {
+      const q = query(collection(db, "projectRoutines"), where("leaderId", "==", leaderId));
       return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
       });
     } else {
-      return localDb.onSnapshotMock('routines', 'projectId', projectId, (snap) => {
+      return localDb.onSnapshotMock('projectRoutines', 'leaderId', leaderId, (snap) => {
         callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
     }
   },
 
-  deleteRoutine: async (routineId) => {
-    if (isConfigured) await deleteDoc(doc(db, "routines", routineId));
-    else await localDb.delete('routines', routineId);
+  deleteProjectRoutine: async (routineId) => {
+    if (isConfigured) await deleteDoc(doc(db, "projectRoutines", routineId));
+    else await localDb.delete('projectRoutines', routineId);
+  },
+
+  deployProjectRoutine: async (leaderId, routineId) => {
+    let routineData;
+    if (isConfigured) {
+      const docSnap = await getDoc(doc(db, "projectRoutines", routineId));
+      if (!docSnap.exists()) throw new Error("Rutina no encontrada");
+      routineData = docSnap.data();
+    } else {
+      const docData = await localDb.get('projectRoutines', routineId);
+      if (!docData.exists()) throw new Error("Rutina no encontrada");
+      routineData = docData.data();
+    }
+    
+    const proj = await dbService.createProject(routineData.name, leaderId);
+    
+    if (routineData.activities && routineData.activities.length > 0) {
+      for (const act of routineData.activities) {
+        await dbService.createActivity(
+          proj.id,
+          act.title,
+          act.description,
+          null,
+          act.type || 'normal',
+          act.targetAmount || null,
+          null
+        );
+      }
+    }
+    return proj;
   },
 
   deleteActivity: async (activityId) => {

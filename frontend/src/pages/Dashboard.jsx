@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { dbService } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, LogIn, Layout, Briefcase, Users, AlertTriangle } from 'lucide-react';
+import { PlusCircle, LogIn, Briefcase, Users, Play, Trash2, Copy } from 'lucide-react';
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [leaderProjects, setLeaderProjects] = useState([]);
   const [helperProjects, setHelperProjects] = useState([]);
+  const [routines, setRoutines] = useState([]);
   const [loading, setLoading] = useState(true);
   
   const [showCreate, setShowCreate] = useState(false);
@@ -21,6 +24,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadAllProjects();
+    const unsubRout = dbService.subscribeToProjectRoutines(user.id, (routs) => setRoutines(routs));
+    return () => unsubRout();
   }, [user.id]);
 
   const loadAllProjects = async () => {
@@ -60,63 +65,116 @@ const Dashboard = () => {
       const proj = await dbService.joinProject(joinCode.toUpperCase(), user.id, nickname);
       navigate(`/project/${proj.id}`);
     } catch (err) {
-      setJoinError(err.message || 'Error al unirse al proyecto');
+      setJoinError(err.message || 'Error al unirse a la actividad');
     }
   };
 
-  if (loading) return <div className="empty-state">Cargando tus proyectos...</div>;
+  const handleDeployRoutine = async (routineId) => {
+    try {
+      const newProj = await dbService.deployProjectRoutine(user.id, routineId);
+      showToast('Actividad desplegada desde la rutina exitosamente', 'success');
+      navigate(`/project/${newProj.id}`);
+    } catch (err) {
+      console.error(err);
+      showToast('Error al desplegar rutina', 'error');
+    }
+  };
+
+  const handleDeleteRoutine = async (routineId) => {
+    if (window.confirm('¿Seguro que deseas eliminar esta rutina guardada?')) {
+      await dbService.deleteProjectRoutine(routineId);
+      showToast('Rutina eliminada', 'success');
+    }
+  };
+
+  if (loading) return <div className="empty-state">Cargando tus actividades...</div>;
 
   return (
     <div className="animate-fade-in">
       <div className="dashboard-header">
         <div className="dashboard-title">
-          <h2>Tus Proyectos</h2>
-          <p>Gestiona los proyectos que lideras y en los que colaboras</p>
+          <h2>Tus Actividades</h2>
+          <p>Gestiona las actividades que lideras y en las que colaboras</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button className="btn btn-secondary" onClick={() => setShowJoin(true)}>
             <LogIn size={20} /> Unirse
           </button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <PlusCircle size={20} /> Crear Proyecto
+            <PlusCircle size={20} /> Crear Actividad
           </button>
         </div>
       </div>
 
       <div className="grid-2">
-        {/* Leader Projects */}
-        <div className="card glass-panel">
-          <h3 className="card-title" style={{ marginBottom: '1.5rem', color: 'var(--primary-color)' }}>
-            <Briefcase size={24} /> Proyectos que Lideras
-          </h3>
-          {leaderProjects.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No lideras ningún proyecto actualmente.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {leaderProjects.map(p => (
-                <div 
-                  key={p.id} 
-                  className="list-item" 
-                  style={{ cursor: 'pointer', transition: 'all 0.2s' }}
-                  onClick={() => navigate(`/project/${p.id}`)}
-                >
-                  <div>
-                    <h4>{p.name}</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Código: {p.joinCode}</p>
+        <div>
+          {/* Leader Projects */}
+          <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
+            <h3 className="card-title" style={{ marginBottom: '1.5rem', color: 'var(--primary-color)' }}>
+              <Briefcase size={24} /> Actividades que Lideras
+            </h3>
+            {leaderProjects.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No lideras ninguna actividad actualmente.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {leaderProjects.map(p => (
+                  <div 
+                    key={p.id} 
+                    className="list-item" 
+                    style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                    onClick={() => navigate(`/project/${p.id}`)}
+                  >
+                    <div>
+                      <h4>{p.name}</h4>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Código: {p.joinCode}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Project Routines */}
+          <div className="card glass-panel">
+            <h3 className="card-title" style={{ marginBottom: '1.5rem' }}>
+              <Copy size={24} /> Actividades Rutinarias Guardadas
+            </h3>
+            {routines.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No tienes actividades rutinarias guardadas. Entra a una actividad y dale clic en "Guardar como Rutina".</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {routines.map(r => (
+                  <div 
+                    key={r.id} 
+                    className="list-item" 
+                    style={{ background: 'var(--surface-color-light)', padding: '0.75rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <div>
+                      <h4>{r.name}</h4>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Contiene {r.activities ? r.activities.length : 0} objetivos predefinidos</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn-icon" style={{ color: 'var(--primary-color)' }} onClick={() => handleDeployRoutine(r.id)} title="Desplegar Actividad">
+                        <Play size={20} />
+                      </button>
+                      <button className="btn-icon" style={{ color: 'var(--danger-color)' }} onClick={() => handleDeleteRoutine(r.id)} title="Eliminar Rutina">
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Helper Projects */}
-        <div className="card glass-panel">
+        <div className="card glass-panel" style={{ height: 'fit-content' }}>
           <h3 className="card-title" style={{ marginBottom: '1.5rem', color: 'var(--secondary-color)' }}>
-            <Users size={24} /> Proyectos en los que Colaboras
+            <Users size={24} /> Actividades en las que Colaboras
           </h3>
           {helperProjects.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No estás colaborando en ningún proyecto.</p>
+            <p style={{ color: 'var(--text-secondary)' }}>No estás colaborando en ninguna actividad.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {helperProjects.map(p => (
@@ -144,10 +202,10 @@ const Dashboard = () => {
         <div className="modal-overlay">
           <div className="modal-content glass-panel card animate-fade-in">
             <button className="modal-close" onClick={() => setShowCreate(false)}>✕</button>
-            <h3 style={{ marginBottom: '1.5rem' }}>Crear Proyecto</h3>
+            <h3 style={{ marginBottom: '1.5rem' }}>Crear Actividad</h3>
             <form onSubmit={handleCreateProject}>
               <div className="form-group">
-                <label>Nombre del Proyecto</label>
+                <label>Nombre de la Actividad</label>
                 <input 
                   type="text" 
                   className="input-field" 
@@ -166,10 +224,10 @@ const Dashboard = () => {
         <div className="modal-overlay">
           <div className="modal-content glass-panel card animate-fade-in">
             <button className="modal-close" onClick={() => setShowJoin(false)}>✕</button>
-            <h3 style={{ marginBottom: '1.5rem' }}>Unirse a Proyecto</h3>
+            <h3 style={{ marginBottom: '1.5rem' }}>Unirse a Actividad</h3>
             <form onSubmit={handleJoinProject}>
               <div className="form-group">
-                <label>Código del Proyecto</label>
+                <label>Código de la Actividad</label>
                 <input 
                   type="text" 
                   className="input-field" 

@@ -4,13 +4,12 @@ import { useToast } from '../context/ToastContext';
 import { dbService } from '../firebase';
 import { formatDistance, format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Users, Clock, Trash2, Plus, Zap, AlertTriangle, Play, CheckCircle, XCircle, Edit, Copy } from 'lucide-react';
+import { Users, Clock, Trash2, Plus, Zap, Play, CheckCircle, XCircle, Edit, Copy, Save } from 'lucide-react';
 
 const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [activities, setActivities] = useState([]);
-  const [routines, setRoutines] = useState([]);
+  const [activities, setActivities] = useState([]); // These are now 'Objetivos'
   
   // Modals / Forms
   const [showNewActModal, setShowNewActModal] = useState(false);
@@ -20,8 +19,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
     assignedTo: '',
     type: 'normal',
     targetAmount: '',
-    deadline: '',
-    saveAsRoutine: false
+    deadline: ''
   });
 
   const [editActModal, setEditActModal] = useState(null); // stores activity to edit
@@ -38,11 +36,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
         setActivities(sorted);
       });
 
-      const unsubRoutines = dbService.subscribeToRoutines(projectId, (routs) => {
-        setRoutines(routs);
-      });
-
-      return () => { unsubActs(); unsubRoutines(); };
+      return () => { unsubActs(); };
     }
   }, [projectId]);
 
@@ -63,46 +57,33 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
       deadlineMs
     );
 
-    if (newAct.saveAsRoutine) {
-      await dbService.createRoutine(project.id, newAct.title, newAct.description, newAct.type, targetAmt);
-      showToast('Actividad y Rutina creadas con éxito');
-    } else {
-      showToast('Actividad creada con éxito');
-    }
+    showToast('Objetivo creado con éxito');
 
-    setNewAct({ title: '', description: '', assignedTo: '', type: 'normal', targetAmount: '', deadline: '', saveAsRoutine: false });
+    setNewAct({ title: '', description: '', assignedTo: '', type: 'normal', targetAmount: '', deadline: '' });
     setShowNewActModal(false);
   };
 
-  const handleDeployRoutine = async (routine) => {
-    await dbService.createActivity(
-      project.id,
-      routine.title,
-      routine.description,
-      null, // unassigned
-      routine.type,
-      routine.targetAmount,
-      null // no deadline by default for routines
-    );
-    showToast('Rutina desplegada como actividad pendiente');
-  };
-
-  const handleDeleteRoutine = async (id) => {
-    if (window.confirm('¿Seguro que deseas eliminar esta rutina?')) {
-      await dbService.deleteRoutine(id);
-      showToast('Rutina eliminada');
+  const handleSaveAsRoutine = async () => {
+    // Save this current Project (Actividad) and its current Activities (Objetivos) as a routine
+    try {
+      const currentActs = await dbService.getActivitiesForProject(project.id);
+      await dbService.createProjectRoutine(user.id, project.name, currentActs);
+      showToast('Actividad guardada como Rutina exitosamente');
+    } catch (error) {
+      console.error(error);
+      showToast('Error al guardar rutina', 'error');
     }
   };
 
   const handleDeleteActivity = async (actId) => {
-    if (window.confirm('¿Seguro que deseas eliminar esta actividad?')) {
+    if (window.confirm('¿Seguro que deseas eliminar este objetivo?')) {
       await dbService.deleteActivity(actId);
-      showToast('Actividad eliminada');
+      showToast('Objetivo eliminado');
     }
   };
 
   const handleDeleteProject = async () => {
-    if (window.confirm('¿ELIMINAR PROYECTO? Esto borrará todas las actividades y desconectará a los ayudantes.')) {
+    if (window.confirm('¿ELIMINAR ACTIVIDAD? Esto borrará todos los objetivos y desconectará a los ayudantes.')) {
       await dbService.deleteProject(project.id);
       if (onProjectDeleted) onProjectDeleted();
     }
@@ -110,13 +91,13 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
 
   const handleAutoAssign = async () => {
     if (!project.helpers || project.helpers.length === 0) {
-      alert("No hay ayudantes en este proyecto para asignar tareas.");
+      alert("No hay ayudantes en esta actividad para asignar objetivos.");
       return;
     }
     
     const unassignedActs = activities.filter(a => a.status === 'pending' && !a.assignedTo);
     if (unassignedActs.length === 0) {
-      showToast('No hay tareas pendientes sin asignar', 'error');
+      showToast('No hay objetivos pendientes sin asignar', 'error');
       return;
     }
 
@@ -152,12 +133,12 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
         helperIndex = (helperIndex + 1) % helpersCount;
       }
     }
-    showToast(`Asignación automática completada`);
+    showToast(`Asignación automática de objetivos completada`);
   };
 
   const handleApprove = async (act) => {
     await dbService.completeActivity(act);
-    showToast('Tarea aprobada y completada');
+    showToast('Objetivo aprobado y completado');
   };
 
   const handleReturn = async (act) => {
@@ -170,7 +151,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
       }
     }
     await dbService.returnActivity(act.id, newAmt);
-    showToast('Tarea devuelta al ayudante');
+    showToast('Objetivo devuelto al ayudante');
   };
 
   const handleEditActivity = async (e) => {
@@ -186,7 +167,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
     };
     
     await dbService.updateActivity(editActModal.id, updates);
-    showToast('Actividad actualizada');
+    showToast('Objetivo actualizado');
     setEditActModal(null);
   };
 
@@ -213,12 +194,15 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
     <div className="animate-fade-in">
       <div className="dashboard-header">
         <div className="dashboard-title">
-          <h2>Panel de Control: {project.name}</h2>
-          <p>Gestiona el proyecto y monitorea el progreso</p>
+          <h2>Panel de Control de la Actividad: {project.name}</h2>
+          <p>Gestiona esta actividad y monitorea el progreso de los objetivos</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn btn-danger" onClick={handleDeleteProject} title="Eliminar Proyecto Actual">
-            <Trash2 size={20} /> Eliminar Proyecto
+          <button className="btn btn-secondary" onClick={handleSaveAsRoutine} title="Guardar como Rutina para futuro">
+            <Save size={20} /> Guardar como Rutina
+          </button>
+          <button className="btn btn-danger" onClick={handleDeleteProject} title="Eliminar Actividad">
+            <Trash2 size={20} /> Eliminar Actividad
           </button>
         </div>
       </div>
@@ -230,21 +214,21 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
               <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
                 <div className="card-header">
                   <h3 className="card-title">
-                    <Play size={24} /> Actividades del Proyecto
+                    <Play size={24} /> Objetivos de esta Actividad
                   </h3>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button className="btn btn-secondary" onClick={handleAutoAssign} title="Asignación Automática (Equitativa)">
                       <Zap size={18} /> Auto-asignar
                     </button>
                     <button className="btn btn-primary" onClick={() => setShowNewActModal(true)}>
-                      <Plus size={18} /> Nueva Actividad
+                      <Plus size={18} /> Nuevo Objetivo
                     </button>
                   </div>
                 </div>
 
                 {activities.length === 0 ? (
                   <div className="empty-state">
-                    <p>No hay actividades creadas. ¡Crea una para comenzar!</p>
+                    <p>No hay objetivos creados. ¡Crea uno para comenzar!</p>
                   </div>
                 ) : (
                   <div>
@@ -257,17 +241,17 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                           <p>{act.description}</p>
                           {act.type === 'numerical' && (
                             <p style={{ fontSize: '0.85rem', color: 'var(--primary-color)' }}>
-                              Objetivo: {act.targetAmount} | Actual: {act.currentAmount || 0}
+                              Meta: {act.targetAmount} | Actual: {act.currentAmount || 0}
                             </p>
                           )}
                           <div className="item-meta">
                             {act.status === 'completed' ? (
-                              <span className="badge badge-completed">Completada</span>
+                              <span className="badge badge-completed">Completado</span>
                             ) : act.status === 'submitted' ? (
                               <span className="badge badge-pending" style={{ background: 'var(--primary-hover)' }}>Revisión Pendiente</span>
                             ) : (
                               <span className={act.assignedTo ? "badge badge-pending" : "badge badge-unassigned"} style={isOverdue ? {background: 'var(--danger-color)', color: 'white'} : {}}>
-                                {isOverdue ? 'Vencida' : act.assignedTo ? "En progreso" : "Sin asignar"}
+                                {isOverdue ? 'Vencido' : act.assignedTo ? "En progreso" : "Sin asignar"}
                               </span>
                             )}
                             
@@ -331,39 +315,10 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
             </div>
 
             <div>
-              {/* Rutinas */}
-              <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
-                <h3 className="card-title" style={{ marginBottom: '1rem' }}>
-                  <Copy size={20} style={{ marginRight: '0.5rem' }} /> Rutinas Guardadas
-                </h3>
-                {routines.length === 0 ? (
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No hay rutinas. Crea una actividad y marca "Guardar como Rutina".</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {routines.map(r => (
-                      <div key={r.id} style={{ background: 'var(--surface-color-light)', padding: '0.75rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <h5 style={{ margin: 0 }}>{r.title}</h5>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.type === 'numerical' ? `Numérica: ${r.targetAmount}` : 'Normal'}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn-icon" style={{ color: 'var(--primary-color)' }} onClick={() => handleDeployRoutine(r)} title="Desplegar Actividad">
-                            <Play size={16} />
-                          </button>
-                          <button className="btn-icon" style={{ color: 'var(--danger-color)' }} onClick={() => handleDeleteRoutine(r.id)} title="Eliminar Rutina">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
                 <h3 className="card-title" style={{ marginBottom: '1rem' }}>Invitar Ayudantes</h3>
                 <div className="join-code-box">
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Código del Proyecto</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Código de la Actividad</p>
                   <h3>{project.joinCode}</h3>
                 </div>
                 
@@ -389,7 +344,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                 <div className="metrics-box">
                   <div className="metric-item">
                     <div className="metric-value">{completedActs.length}</div>
-                    <div className="metric-label">Completadas</div>
+                    <div className="metric-label">Objetivos Cumplidos</div>
                   </div>
                   <div className="metric-item">
                     <div className="metric-value">{formatTime(avgTimeMs)}</div>
@@ -402,15 +357,15 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
         </>
       )}
 
-      {/* Modal Nueva Actividad */}
+      {/* Modal Nuevo Objetivo */}
       {showNewActModal && (
         <div className="modal-overlay">
           <div className="modal-content glass-panel card animate-fade-in" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <button className="modal-close" onClick={() => setShowNewActModal(false)}>✕</button>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Nueva Actividad</h3>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Nuevo Objetivo</h3>
             <form onSubmit={handleCreateActivity}>
               <div className="form-group">
-                <label>Título de la actividad</label>
+                <label>Título del objetivo</label>
                 <input 
                   type="text" 
                   className="input-field" 
@@ -429,19 +384,19 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                 ></textarea>
               </div>
               <div className="form-group">
-                <label>Tipo de Tarea</label>
+                <label>Tipo de Objetivo</label>
                 <select 
                   className="input-field select-field"
                   value={newAct.type}
                   onChange={e => setNewAct({...newAct, type: e.target.value})}
                 >
                   <option value="normal">Normal (Checkbox)</option>
-                  <option value="numerical">Numérica (Cantidad)</option>
+                  <option value="numerical">Numérico (Cantidad)</option>
                 </select>
               </div>
               {newAct.type === 'numerical' && (
                 <div className="form-group">
-                  <label>Objetivo Numérico</label>
+                  <label>Meta Numérica</label>
                   <input 
                     type="number" 
                     className="input-field" 
@@ -474,27 +429,18 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                   ))}
                 </select>
               </div>
-              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <input 
-                  type="checkbox" 
-                  id="saveRoutine"
-                  checked={newAct.saveAsRoutine}
-                  onChange={e => setNewAct({...newAct, saveAsRoutine: e.target.checked})}
-                />
-                <label htmlFor="saveRoutine" style={{ margin: 0 }}>Guardar en mis Rutinas</label>
-              </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Crear Actividad</button>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Crear Objetivo</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal Editar Actividad */}
+      {/* Modal Editar Objetivo */}
       {editActModal && (
         <div className="modal-overlay">
           <div className="modal-content glass-panel card animate-fade-in" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <button className="modal-close" onClick={() => setEditActModal(null)}>✕</button>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Editar Actividad</h3>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Editar Objetivo</h3>
             <form onSubmit={handleEditActivity}>
               <div className="form-group">
                 <label>Título</label>
@@ -516,19 +462,19 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                 ></textarea>
               </div>
               <div className="form-group">
-                <label>Tipo de Tarea</label>
+                <label>Tipo de Objetivo</label>
                 <select 
                   className="input-field select-field"
                   value={editActModal.type}
                   onChange={e => setEditActModal({...editActModal, type: e.target.value})}
                 >
                   <option value="normal">Normal (Checkbox)</option>
-                  <option value="numerical">Numérica (Cantidad)</option>
+                  <option value="numerical">Numérico (Cantidad)</option>
                 </select>
               </div>
               {editActModal.type === 'numerical' && (
                 <div className="form-group">
-                  <label>Objetivo Numérico</label>
+                  <label>Meta Numérica</label>
                   <input 
                     type="number" 
                     className="input-field" 
