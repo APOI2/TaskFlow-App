@@ -45,6 +45,7 @@ class LocalStore {
     this.storage = window.localStorage;
     if (!this.storage.getItem('projects')) this.storage.setItem('projects', JSON.stringify({}));
     if (!this.storage.getItem('activities')) this.storage.setItem('activities', JSON.stringify({}));
+    if (!this.storage.getItem('users')) this.storage.setItem('users', JSON.stringify({}));
   }
 
   // Helpers para simular las llamadas asíncronas de Firebase
@@ -100,6 +101,44 @@ const localDb = new LocalStore();
 const generateCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
+export const authService = {
+  register: async (email, password, name) => {
+    if (isConfigured) {
+      // Usar firestore para usuarios (simulado simple si no se usa auth)
+      const q = query(collection(db, "users"), where("email", "==", email));
+      const snap = await getDocs(q);
+      if (!snap.empty) throw new Error("El correo ya está registrado");
+      
+      const docRef = doc(collection(db, "users"));
+      const userData = { email, password, name, createdAt: Date.now() };
+      await setDoc(docRef, userData);
+      return { id: docRef.id, name, email };
+    } else {
+      const q = await localDb.query('users', 'email', email);
+      if (q.docs.length > 0) throw new Error("El correo ya está registrado");
+      
+      const id = generateId();
+      const userData = { email, password, name, createdAt: Date.now() };
+      await localDb.set('users', id, userData);
+      return { id, name, email };
+    }
+  },
+  login: async (email, password) => {
+    if (isConfigured) {
+      const q = query(collection(db, "users"), where("email", "==", email), where("password", "==", password));
+      const snap = await getDocs(q);
+      if (snap.empty) throw new Error("Credenciales inválidas");
+      const userDoc = snap.docs[0];
+      return { id: userDoc.id, name: userDoc.data().name, email: userDoc.data().email };
+    } else {
+      const q = await localDb.query('users', 'email', email);
+      const user = q.docs.find(d => d.data().password === password);
+      if (!user) throw new Error("Credenciales inválidas");
+      return { id: user.id, name: user.data().name, email: user.data().email };
+    }
+  }
+};
+
 export const dbService = {
   createProject: async (name, leaderId) => {
     const joinCode = generateCode();
@@ -122,7 +161,7 @@ export const dbService = {
     }
   },
 
-  joinProject: async (joinCode, helperId, helperName) => {
+  joinProject: async (joinCode, helperId, nickname) => {
     if (isConfigured) {
       const q = query(collection(db, "projects"), where("joinCode", "==", joinCode));
       const querySnapshot = await getDocs(q);
@@ -133,7 +172,7 @@ export const dbService = {
 
       // Añadir ayudante si no existe
       if (!projectData.helpers.find(h => h.id === helperId)) {
-        const helpers = [...projectData.helpers, { id: helperId, name: helperName }];
+        const helpers = [...projectData.helpers, { id: helperId, name: nickname }];
         await updateDoc(doc(db, "projects", projectDoc.id), { helpers });
       }
       return { id: projectDoc.id, ...projectData };
@@ -144,7 +183,7 @@ export const dbService = {
       const projectDoc = q.docs[0];
       const projectData = projectDoc.data();
       if (!projectData.helpers.find(h => h.id === helperId)) {
-        const helpers = [...projectData.helpers, { id: helperId, name: helperName }];
+        const helpers = [...projectData.helpers, { id: helperId, name: nickname }];
         await localDb.update('projects', projectDoc.id, { helpers });
       }
       return { id: projectDoc.id, ...projectData };

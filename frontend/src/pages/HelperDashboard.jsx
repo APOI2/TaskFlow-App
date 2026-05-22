@@ -5,20 +5,13 @@ import { formatDistance } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CheckCircle, Clock, Layout } from 'lucide-react';
 
-const HelperDashboard = () => {
+const HelperDashboard = ({ projectId, project }) => {
   const { user } = useAuth();
-  const [projects, setProjects] = useState([]);
-  const [currentProject, setCurrentProject] = useState(null);
   const [activities, setActivities] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProjects();
-  }, [user.id]);
-
-  useEffect(() => {
-    if (currentProject) {
-      const unsubscribe = dbService.subscribeToActivities(currentProject.id, (acts) => {
+    if (projectId) {
+      const unsubscribe = dbService.subscribeToActivities(projectId, (acts) => {
         // Filtrar solo las asignadas a este ayudante
         const myActs = acts.filter(a => a.assignedTo === user.id);
         
@@ -33,68 +26,26 @@ const HelperDashboard = () => {
     } else {
       setActivities([]);
     }
-  }, [currentProject, user.id]);
-
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const proj = await dbService.getProjectsForHelper(user.id);
-      setProjects(proj);
-      
-      // Si el proyecto actual ya no existe (ej. el jefe lo borró), deseleccionar
-      if (currentProject && !proj.find(p => p.id === currentProject.id)) {
-        setCurrentProject(null);
-      } else if (proj.length > 0 && !currentProject) {
-        setCurrentProject(proj[0]);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [projectId, user.id]);
 
   const handleCompleteActivity = async (act) => {
     await dbService.completeActivity(act);
   };
 
-  if (loading) return <div className="empty-state">Cargando tus tareas...</div>;
 
-  if (projects.length === 0) {
-    return (
-      <div className="empty-state glass-panel">
-        <Layout size={48} />
-        <h2>Sin Proyectos</h2>
-        <p>No estás unido a ningún proyecto. Pídele el código a tu Jefe de proyecto e ingresa de nuevo.</p>
-        <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>Recargar página</button>
-      </div>
-    );
-  }
 
   return (
     <div className="animate-fade-in">
       <div className="dashboard-header">
         <div className="dashboard-title">
-          <h2>Tus Actividades Asignadas</h2>
+          <h2>Tus Actividades Asignadas en {project?.name}</h2>
           <p>Revisa y completa tus tareas pendientes</p>
-        </div>
-        <div>
-          <select 
-            className="input-field select-field"
-            value={currentProject?.id || ''}
-            onChange={(e) => setCurrentProject(projects.find(p => p.id === e.target.value))}
-            style={{ width: '250px' }}
-          >
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
         </div>
       </div>
 
       <div className="card glass-panel">
         <h3 className="card-title" style={{ marginBottom: '1.5rem' }}>
-          Tareas en {currentProject?.name}
+          Tareas Pendientes
         </h3>
 
         {activities.length === 0 ? (

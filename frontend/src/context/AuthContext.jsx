@@ -6,25 +6,19 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Para simplificar, el login se persiste en sessionStorage o localStorage 
-    // en lugar de Firebase Auth, para enfocarnos en los datos de proyectos.
     const storedUser = sessionStorage.getItem('authUser');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
+    setLoading(false);
   }, []);
 
-  const login = (name, role) => {
-    // Generamos un ID pseudo-aleatorio para el usuario
-    const newUser = {
-      id: Math.random().toString(36).substring(2, 10),
-      name,
-      role
-    };
-    setUser(newUser);
-    sessionStorage.setItem('authUser', JSON.stringify(newUser));
+  const loginUser = (userData) => {
+    setUser(userData);
+    sessionStorage.setItem('authUser', JSON.stringify(userData));
   };
 
   const logout = () => {
@@ -33,8 +27,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ user, loginUser, logout, loading }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

@@ -2,8 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Welcome from './pages/Welcome';
-import LeaderDashboard from './pages/LeaderDashboard';
-import HelperDashboard from './pages/HelperDashboard';
+import Dashboard from './pages/Dashboard';
+import ProjectView from './pages/ProjectView';
 import { LogOut, Activity } from 'lucide-react';
 import './App.css';
 
@@ -19,9 +19,6 @@ const NavigationBar = () => {
         <span>TaskFlow</span>
       </div>
       <div className="user-info">
-        <span className="user-role">
-          {user.role === 'leader' ? 'Jefe / Líder' : 'Ayudante'}
-        </span>
         <span>{user.name}</span>
         <button onClick={logout} className="logout-btn" title="Cerrar sesión">
           <LogOut size={20} />
@@ -31,20 +28,19 @@ const NavigationBar = () => {
   );
 };
 
-const ProtectedRoute = ({ children, roleRequired }) => {
-  const { user } = useAuth();
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
   
+  if (loading) return null; // or a spinner
   if (!user) return <Navigate to="/" replace />;
-  if (roleRequired && user.role !== roleRequired) {
-    // Redirigir al dashboard correcto si el rol no coincide
-    return <Navigate to={user.role === 'leader' ? "/leader" : "/helper"} replace />;
-  }
   
   return children;
 };
 
 const MainRouter = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
 
   return (
     <div className="app-container">
@@ -55,25 +51,25 @@ const MainRouter = () => {
             path="/" 
             element={
               user ? (
-                <Navigate to={user.role === 'leader' ? "/leader" : "/helper"} replace />
+                <Navigate to="/dashboard" replace />
               ) : (
                 <Welcome />
               )
             } 
           />
           <Route 
-            path="/leader" 
+            path="/dashboard" 
             element={
-              <ProtectedRoute roleRequired="leader">
-                <LeaderDashboard />
+              <ProtectedRoute>
+                <Dashboard />
               </ProtectedRoute>
             } 
           />
           <Route 
-            path="/helper" 
+            path="/project/:id" 
             element={
-              <ProtectedRoute roleRequired="helper">
-                <HelperDashboard />
+              <ProtectedRoute>
+                <ProjectView />
               </ProtectedRoute>
             } 
           />

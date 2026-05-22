@@ -1,60 +1,46 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { dbService } from '../firebase';
-import { PlusCircle, LogIn, Activity } from 'lucide-react';
+import { authService } from '../firebase';
+import { Activity, LogIn, UserPlus } from 'lucide-react';
 
 const Welcome = () => {
-  const { login } = useAuth();
-  const [view, setView] = useState('initial'); // initial, create, join
+  const { loginUser } = useAuth();
+  const [view, setView] = useState('login'); // login, register
   const [name, setName] = useState('');
-  const [projectName, setProjectName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleCreateProject = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !projectName.trim()) return;
+    if (!email.trim() || !password.trim()) return;
     
     setLoading(true);
+    setError('');
     try {
-      // Entramos como líder de manera temporal
-      login(name, 'leader');
-      
-      // Obtenemos el usuario simulado para obtener el ID
-      const tempUser = JSON.parse(sessionStorage.getItem('authUser'));
-      
-      await dbService.createProject(projectName, tempUser.id);
-      // Redirección manejada por AuthContext y App.js
+      const userData = await authService.login(email, password);
+      loginUser(userData);
     } catch (err) {
       console.error(err);
-      setError("Error al crear el proyecto. Intenta nuevamente.");
+      setError(err.message || "Error al iniciar sesión.");
       setLoading(false);
     }
   };
 
-  const handleJoinProject = async (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !joinCode.trim()) return;
+    if (!name.trim() || !email.trim() || !password.trim()) return;
     
     setLoading(true);
     setError('');
     
     try {
-      // Creamos el helper temporal
-      const newUserId = Math.random().toString(36).substring(2, 10);
-      
-      // Intentamos unirnos
-      await dbService.joinProject(joinCode.toUpperCase(), newUserId, name);
-      
-      // Si tuvo éxito, registramos al usuario localmente
-      const newUser = { id: newUserId, name, role: 'helper' };
-      sessionStorage.setItem('authUser', JSON.stringify(newUser));
-      window.location.reload(); // Recargar para activar el contexto de auth de forma sucia y rápida para simulación
-      
+      const userData = await authService.register(email, password, name);
+      loginUser(userData);
     } catch (err) {
       console.error(err);
-      setError(err.message || "Código inválido o error de conexión.");
+      setError(err.message || "Error al registrarse.");
       setLoading(false);
     }
   };
@@ -68,28 +54,43 @@ const Welcome = () => {
         <h1>TaskFlow</h1>
         <p>Gestión inteligente de actividades y proyectos</p>
 
-        {view === 'initial' && (
-          <div className="auth-actions" style={{ flexDirection: 'column' }}>
-            <button 
-              onClick={() => setView('create')} 
-              className="btn btn-primary"
-            >
-              <PlusCircle size={20} /> Crear un nuevo proyecto
-            </button>
-            <div className="divider">o</div>
-            <button 
-              onClick={() => setView('join')} 
-              className="btn btn-secondary"
-            >
-              <LogIn size={20} /> Unirte a un proyecto
-            </button>
-          </div>
-        )}
-
-        {view === 'create' && (
-          <form onSubmit={handleCreateProject} className="animate-fade-in">
+        {view === 'login' ? (
+          <form onSubmit={handleLogin} className="animate-fade-in" style={{ marginTop: '2rem' }}>
             <div className="form-group">
-              <label>Tu Nombre (Jefe/Líder)</label>
+              <label>Correo Electrónico</label>
+              <input 
+                type="email" 
+                className="input-field" 
+                placeholder="ejemplo@correo.com" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                required 
+              />
+            </div>
+            <div className="form-group">
+              <label>Contraseña</label>
+              <input 
+                type="password" 
+                className="input-field" 
+                placeholder="Tu contraseña" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                required 
+              />
+            </div>
+            {error && <div style={{ color: 'var(--danger-color)', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
+            
+            <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%' }}>
+              <LogIn size={20} /> {loading ? 'Ingresando...' : 'Iniciar Sesión'}
+            </button>
+            <p style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.9rem' }}>
+              ¿No tienes una cuenta? <button type="button" className="btn-link" onClick={() => { setView('register'); setError(''); }}>Regístrate aquí</button>
+            </p>
+          </form>
+        ) : (
+          <form onSubmit={handleRegister} className="animate-fade-in" style={{ marginTop: '2rem' }}>
+            <div className="form-group">
+              <label>Nombre Completo</label>
               <input 
                 type="text" 
                 className="input-field" 
@@ -100,71 +101,35 @@ const Welcome = () => {
               />
             </div>
             <div className="form-group">
-              <label>Nombre del Proyecto</label>
+              <label>Correo Electrónico</label>
               <input 
-                type="text" 
+                type="email" 
                 className="input-field" 
-                placeholder="Ej. Diseño de Interfaz" 
-                value={projectName} 
-                onChange={(e) => setProjectName(e.target.value)} 
+                placeholder="ejemplo@correo.com" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                required 
+              />
+            </div>
+            <div className="form-group">
+              <label>Contraseña</label>
+              <input 
+                type="password" 
+                className="input-field" 
+                placeholder="Crea una contraseña" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
                 required 
               />
             </div>
             {error && <div style={{ color: 'var(--danger-color)', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
             
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Creando...' : 'Comenzar Proyecto'}
+            <button type="submit" className="btn btn-secondary" disabled={loading} style={{ width: '100%' }}>
+              <UserPlus size={20} /> {loading ? 'Registrando...' : 'Crear Cuenta'}
             </button>
-            <button 
-              type="button" 
-              className="btn btn-icon" 
-              style={{ marginTop: '1rem', width: '100%' }}
-              onClick={() => setView('initial')}
-            >
-              Volver
-            </button>
-          </form>
-        )}
-
-        {view === 'join' && (
-          <form onSubmit={handleJoinProject} className="animate-fade-in">
-            <div className="form-group">
-              <label>Tu Nombre (Ayudante)</label>
-              <input 
-                type="text" 
-                className="input-field" 
-                placeholder="Ej. Carlos Mendoza" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
-              />
-            </div>
-            <div className="form-group">
-              <label>Código del Proyecto</label>
-              <input 
-                type="text" 
-                className="input-field" 
-                placeholder="Ej. AB12CD" 
-                value={joinCode} 
-                onChange={(e) => setJoinCode(e.target.value)}
-                style={{ textTransform: 'uppercase' }}
-                maxLength={6}
-                required 
-              />
-            </div>
-            {error && <div style={{ color: 'var(--danger-color)', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
-            
-            <button type="submit" className="btn btn-secondary" disabled={loading}>
-              {loading ? 'Conectando...' : 'Unirse al Proyecto'}
-            </button>
-            <button 
-              type="button" 
-              className="btn btn-icon" 
-              style={{ marginTop: '1rem', width: '100%' }}
-              onClick={() => setView('initial')}
-            >
-              Volver
-            </button>
+            <p style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.9rem' }}>
+              ¿Ya tienes una cuenta? <button type="button" className="btn-link" onClick={() => { setView('login'); setError(''); }}>Inicia sesión</button>
+            </p>
           </form>
         )}
       </div>

@@ -5,24 +5,17 @@ import { formatDistance, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Users, Clock, Trash2, Plus, Zap, AlertTriangle, Play } from 'lucide-react';
 
-const LeaderDashboard = () => {
+const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   const { user } = useAuth();
-  const [projects, setProjects] = useState([]);
-  const [currentProject, setCurrentProject] = useState(null);
   const [activities, setActivities] = useState([]);
-  const [loading, setLoading] = useState(true);
   
   // Modals / Forms
   const [showNewActModal, setShowNewActModal] = useState(false);
   const [newAct, setNewAct] = useState({ title: '', description: '', assignedTo: '' });
 
   useEffect(() => {
-    loadProjects();
-  }, [user.id]);
-
-  useEffect(() => {
-    if (currentProject) {
-      const unsubscribe = dbService.subscribeToActivities(currentProject.id, (acts) => {
+    if (projectId) {
+      const unsubscribe = dbService.subscribeToActivities(projectId, (acts) => {
         // Ordenar: Pendientes primero, luego Completadas
         const sorted = acts.sort((a, b) => {
           if (a.status === b.status) return b.createdAt - a.createdAt;
@@ -32,29 +25,14 @@ const LeaderDashboard = () => {
       });
       return () => unsubscribe();
     }
-  }, [currentProject]);
-
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const proj = await dbService.getProjectsForLeader(user.id);
-      setProjects(proj);
-      if (proj.length > 0 && !currentProject) {
-        setCurrentProject(proj[0]);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [projectId]);
 
   const handleCreateActivity = async (e) => {
     e.preventDefault();
-    if (!newAct.title.trim() || !currentProject) return;
+    if (!newAct.title.trim() || !project) return;
     
     await dbService.createActivity(
-      currentProject.id, 
+      project.id, 
       newAct.title, 
       newAct.description, 
       newAct.assignedTo || null
@@ -71,14 +49,13 @@ const LeaderDashboard = () => {
 
   const handleDeleteProject = async () => {
     if (window.confirm('¿ELIMINAR PROYECTO? Esto borrará todas las actividades y desconectará a los ayudantes.')) {
-      await dbService.deleteProject(currentProject.id);
-      setCurrentProject(null);
-      loadProjects();
+      await dbService.deleteProject(project.id);
+      if (onProjectDeleted) onProjectDeleted();
     }
   };
 
   const handleAutoAssign = async () => {
-    if (!currentProject.helpers || currentProject.helpers.length === 0) {
+    if (!project.helpers || project.helpers.length === 0) {
       alert("No hay ayudantes en este proyecto para asignar tareas.");
       return;
     }
@@ -91,7 +68,7 @@ const LeaderDashboard = () => {
 
     // Asignación Round-Robin
     for (const act of unassignedActs) {
-      const helper = currentProject.helpers[helperIndex];
+      const helper = project.helpers[helperIndex];
       await dbService.updateActivity(act.id, { assignedTo: helper.id });
       helperIndex = (helperIndex + 1) % helpersCount;
     }
@@ -99,7 +76,7 @@ const LeaderDashboard = () => {
   };
 
   const getHelperName = (id) => {
-    const h = currentProject?.helpers?.find(h => h.id === id);
+    const h = project?.helpers?.find(h => h.id === id);
     return h ? h.name : 'Desconocido';
   };
 
@@ -118,44 +95,21 @@ const LeaderDashboard = () => {
     return `${s}s`;
   };
 
-  if (loading) return <div className="empty-state">Cargando...</div>;
-
-  if (projects.length === 0) {
-    return (
-      <div className="empty-state glass-panel">
-        <AlertTriangle size={48} />
-        <h2>Aún no tienes proyectos</h2>
-        <p>Parece que has iniciado sesión como jefe pero no tienes proyectos.</p>
-        <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>Recargar página</button>
-      </div>
-    );
-  }
-
   return (
     <div className="animate-fade-in">
       <div className="dashboard-header">
         <div className="dashboard-title">
-          <h2>Panel de Control</h2>
-          <p>Gestiona tus proyectos y monitorea el progreso</p>
+          <h2>Panel de Control: {project.name}</h2>
+          <p>Gestiona el proyecto y monitorea el progreso</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <select 
-            className="input-field select-field"
-            value={currentProject?.id || ''}
-            onChange={(e) => setCurrentProject(projects.find(p => p.id === e.target.value))}
-            style={{ width: '250px' }}
-          >
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
           <button className="btn btn-danger" onClick={handleDeleteProject} title="Eliminar Proyecto Actual">
-            <Trash2 size={20} />
+            <Trash2 size={20} /> Eliminar Proyecto
           </button>
         </div>
       </div>
 
-      {currentProject && (
+      {project && (
         <>
           <div className="grid-2">
             <div>
@@ -234,18 +188,18 @@ const LeaderDashboard = () => {
                 <h3 className="card-title" style={{ marginBottom: '1rem' }}>Invitar Ayudantes</h3>
                 <div className="join-code-box">
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Código del Proyecto</p>
-                  <h3>{currentProject.joinCode}</h3>
+                  <h3>{project.joinCode}</h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Comparte este código con tu equipo</p>
                 </div>
                 
                 <h4 style={{ marginBottom: '1rem', marginTop: '1.5rem', color: 'var(--text-secondary)' }}>
-                  Equipo Actual ({currentProject.helpers?.length || 0})
+                  Equipo Actual ({project.helpers?.length || 0})
                 </h4>
-                {(!currentProject.helpers || currentProject.helpers.length === 0) ? (
+                {(!project.helpers || project.helpers.length === 0) ? (
                   <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Aún no se ha unido nadie.</p>
                 ) : (
                   <ul style={{ listStyle: 'none' }}>
-                    {currentProject.helpers.map(h => (
+                    {project.helpers.map(h => (
                       <li key={h.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--surface-color-light)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success-color)' }}></div>
                         {h.name}
@@ -307,7 +261,7 @@ const LeaderDashboard = () => {
                   onChange={e => setNewAct({...newAct, assignedTo: e.target.value})}
                 >
                   <option value="">-- Sin asignar --</option>
-                  {currentProject?.helpers?.map(h => (
+                  {project?.helpers?.map(h => (
                     <option key={h.id} value={h.id}>{h.name}</option>
                   ))}
                 </select>
