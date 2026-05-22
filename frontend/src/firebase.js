@@ -54,6 +54,7 @@ class LocalStore {
     if (!this.storage.getItem('projects')) this.storage.setItem('projects', JSON.stringify({}));
     if (!this.storage.getItem('activities')) this.storage.setItem('activities', JSON.stringify({}));
     if (!this.storage.getItem('users')) this.storage.setItem('users', JSON.stringify({}));
+    if (!this.storage.getItem('routines')) this.storage.setItem('routines', JSON.stringify({}));
   }
 
   // Helpers para simular las llamadas asíncronas de Firebase
@@ -230,12 +231,16 @@ export const dbService = {
     }
   },
 
-  createActivity: async (projectId, title, description, assignedTo = null) => {
+  createActivity: async (projectId, title, description, assignedTo = null, type = 'normal', targetAmount = null, deadline = null) => {
     const actData = {
       projectId,
       title,
       description,
       assignedTo,
+      type,
+      targetAmount,
+      currentAmount: type === 'numerical' ? 0 : null,
+      deadline,
       status: 'pending',
       createdAt: Date.now(),
       completedAt: null,
@@ -288,6 +293,54 @@ export const dbService = {
         timeTakenMs
       });
     }
+  },
+
+  submitActivity: async (activity, finalAmount = null) => {
+    const updates = { status: 'submitted' };
+    if (finalAmount !== null) updates.currentAmount = finalAmount;
+    if (isConfigured) {
+      await updateDoc(doc(db, "activities", activity.id), updates);
+    } else {
+      await localDb.update('activities', activity.id, updates);
+    }
+  },
+
+  returnActivity: async (activityId, newAmount = null) => {
+    const updates = { status: 'pending' };
+    if (newAmount !== null) updates.currentAmount = newAmount;
+    if (isConfigured) {
+      await updateDoc(doc(db, "activities", activityId), updates);
+    } else {
+      await localDb.update('activities', activityId, updates);
+    }
+  },
+
+  createRoutine: async (projectId, title, description, type = 'normal', targetAmount = null) => {
+    const routineData = { projectId, title, description, type, targetAmount, createdAt: Date.now() };
+    if (isConfigured) {
+      const docRef = doc(collection(db, "routines"));
+      await setDoc(docRef, routineData);
+    } else {
+      await localDb.set('routines', generateId(), routineData);
+    }
+  },
+
+  subscribeToRoutines: (projectId, callback) => {
+    if (isConfigured) {
+      const q = query(collection(db, "routines"), where("projectId", "==", projectId));
+      return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    } else {
+      return localDb.onSnapshotMock('routines', 'projectId', projectId, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
+  },
+
+  deleteRoutine: async (routineId) => {
+    if (isConfigured) await deleteDoc(doc(db, "routines", routineId));
+    else await localDb.delete('routines', routineId);
   },
 
   deleteActivity: async (activityId) => {

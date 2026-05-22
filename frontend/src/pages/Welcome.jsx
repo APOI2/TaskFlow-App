@@ -51,7 +51,7 @@ const Welcome = () => {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', color: 'var(--primary-color)' }}>
           <Activity size={48} />
         </div>
-        <h1>TaskFlow</h1>
+        <h1>GTI katana</h1>
         <p>Gestión inteligente de actividades y proyectos</p>
 
         {view === 'login' ? (

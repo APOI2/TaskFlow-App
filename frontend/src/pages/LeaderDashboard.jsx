@@ -1,29 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { dbService } from '../firebase';
 import { formatDistance, format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Users, Clock, Trash2, Plus, Zap, AlertTriangle, Play } from 'lucide-react';
+import { Users, Clock, Trash2, Plus, Zap, AlertTriangle, Play, CheckCircle, XCircle, Edit, Copy } from 'lucide-react';
 
 const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [activities, setActivities] = useState([]);
+  const [routines, setRoutines] = useState([]);
   
   // Modals / Forms
   const [showNewActModal, setShowNewActModal] = useState(false);
-  const [newAct, setNewAct] = useState({ title: '', description: '', assignedTo: '' });
+  const [newAct, setNewAct] = useState({ 
+    title: '', 
+    description: '', 
+    assignedTo: '',
+    type: 'normal',
+    targetAmount: '',
+    deadline: '',
+    saveAsRoutine: false
+  });
+
+  const [editActModal, setEditActModal] = useState(null); // stores activity to edit
 
   useEffect(() => {
     if (projectId) {
-      const unsubscribe = dbService.subscribeToActivities(projectId, (acts) => {
-        // Ordenar: Pendientes primero, luego Completadas
+      const unsubActs = dbService.subscribeToActivities(projectId, (acts) => {
         const sorted = acts.sort((a, b) => {
           if (a.status === b.status) return b.createdAt - a.createdAt;
-          return a.status === 'pending' ? -1 : 1;
+          if (a.status === 'submitted') return -1;
+          if (a.status === 'pending') return 0;
+          return 1;
         });
         setActivities(sorted);
       });
-      return () => unsubscribe();
+
+      const unsubRoutines = dbService.subscribeToRoutines(projectId, (routs) => {
+        setRoutines(routs);
+      });
+
+      return () => { unsubActs(); unsubRoutines(); };
     }
   }, [projectId]);
 
@@ -31,19 +50,54 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
     e.preventDefault();
     if (!newAct.title.trim() || !project) return;
     
+    const deadlineMs = newAct.deadline ? new Date(newAct.deadline).getTime() : null;
+    const targetAmt = newAct.type === 'numerical' ? Number(newAct.targetAmount) : null;
+
     await dbService.createActivity(
       project.id, 
       newAct.title, 
       newAct.description, 
-      newAct.assignedTo || null
+      newAct.assignedTo || null,
+      newAct.type,
+      targetAmt,
+      deadlineMs
     );
-    setNewAct({ title: '', description: '', assignedTo: '' });
+
+    if (newAct.saveAsRoutine) {
+      await dbService.createRoutine(project.id, newAct.title, newAct.description, newAct.type, targetAmt);
+      showToast('Actividad y Rutina creadas con éxito');
+    } else {
+      showToast('Actividad creada con éxito');
+    }
+
+    setNewAct({ title: '', description: '', assignedTo: '', type: 'normal', targetAmount: '', deadline: '', saveAsRoutine: false });
     setShowNewActModal(false);
+  };
+
+  const handleDeployRoutine = async (routine) => {
+    await dbService.createActivity(
+      project.id,
+      routine.title,
+      routine.description,
+      null, // unassigned
+      routine.type,
+      routine.targetAmount,
+      null // no deadline by default for routines
+    );
+    showToast('Rutina desplegada como actividad pendiente');
+  };
+
+  const handleDeleteRoutine = async (id) => {
+    if (window.confirm('¿Seguro que deseas eliminar esta rutina?')) {
+      await dbService.deleteRoutine(id);
+      showToast('Rutina eliminada');
+    }
   };
 
   const handleDeleteActivity = async (actId) => {
     if (window.confirm('¿Seguro que deseas eliminar esta actividad?')) {
       await dbService.deleteActivity(actId);
+      showToast('Actividad eliminada');
     }
   };
 
@@ -61,18 +115,79 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
     }
     
     const unassignedActs = activities.filter(a => a.status === 'pending' && !a.assignedTo);
-    if (unassignedActs.length === 0) return;
+    if (unassignedActs.length === 0) {
+      showToast('No hay tareas pendientes sin asignar', 'error');
+      return;
+    }
 
     let helperIndex = 0;
-    const helpersCount = currentProject.helpers.length;
+    const helpersCount = project.helpers.length;
 
-    // Asignación Round-Robin
     for (const act of unassignedActs) {
-      const helper = project.helpers[helperIndex];
-      await dbService.updateActivity(act.id, { assignedTo: helper.id });
-      helperIndex = (helperIndex + 1) % helpersCount;
+      if (act.type === 'numerical' && act.targetAmount) {
+        // Divide into pieces
+        const pieceAmount = Math.floor(act.targetAmount / helpersCount);
+        const remainder = act.targetAmount % helpersCount;
+        
+        await dbService.deleteActivity(act.id);
+        
+        for (let i = 0; i < helpersCount; i++) {
+          const helper = project.helpers[i];
+          const amountForThis = i === 0 ? pieceAmount + remainder : pieceAmount;
+          if (amountForThis > 0) {
+            await dbService.createActivity(
+              project.id, 
+              `${act.title} (Parte)`, 
+              act.description, 
+              helper.id, 
+              'numerical', 
+              amountForThis, 
+              act.deadline
+            );
+          }
+        }
+      } else {
+        const helper = project.helpers[helperIndex];
+        await dbService.updateActivity(act.id, { assignedTo: helper.id });
+        helperIndex = (helperIndex + 1) % helpersCount;
+      }
     }
-    alert(`Se asignaron ${unassignedActs.length} tareas automáticamente.`);
+    showToast(`Asignación automática completada`);
+  };
+
+  const handleApprove = async (act) => {
+    await dbService.completeActivity(act);
+    showToast('Tarea aprobada y completada');
+  };
+
+  const handleReturn = async (act) => {
+    let newAmt = act.currentAmount;
+    if (act.type === 'numerical') {
+      const p = window.prompt("Ingresa el valor numérico correcto o déjalo igual para devolverlo:", act.currentAmount);
+      if (p === null) return; // cancel
+      if (!isNaN(Number(p))) {
+        newAmt = Number(p);
+      }
+    }
+    await dbService.returnActivity(act.id, newAmt);
+    showToast('Tarea devuelta al ayudante');
+  };
+
+  const handleEditActivity = async (e) => {
+    e.preventDefault();
+    if (!editActModal.title.trim()) return;
+
+    const updates = {
+      title: editActModal.title,
+      description: editActModal.description,
+      type: editActModal.type,
+      targetAmount: editActModal.type === 'numerical' ? Number(editActModal.targetAmount) : null,
+      deadline: editActModal.deadline ? new Date(editActModal.deadline).getTime() : null,
+    };
+    
+    await dbService.updateActivity(editActModal.id, updates);
+    showToast('Actividad actualizada');
+    setEditActModal(null);
   };
 
   const getHelperName = (id) => {
@@ -80,7 +195,6 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
     return h ? h.name : 'Desconocido';
   };
 
-  // Metrics calculation
   const completedActs = activities.filter(a => a.status === 'completed');
   const avgTimeMs = completedActs.length > 0 
     ? completedActs.reduce((acc, curr) => acc + curr.timeTakenMs, 0) / completedActs.length 
@@ -134,17 +248,26 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                   </div>
                 ) : (
                   <div>
-                    {activities.map(act => (
-                      <div key={act.id} className="list-item">
+                    {activities.map(act => {
+                      const isOverdue = act.deadline && Date.now() > act.deadline;
+                      return (
+                      <div key={act.id} className="list-item" style={{ border: isOverdue && act.status === 'pending' ? '1px solid var(--danger-color)' : 'none' }}>
                         <div className="item-content">
                           <h4>{act.title}</h4>
                           <p>{act.description}</p>
+                          {act.type === 'numerical' && (
+                            <p style={{ fontSize: '0.85rem', color: 'var(--primary-color)' }}>
+                              Objetivo: {act.targetAmount} | Actual: {act.currentAmount || 0}
+                            </p>
+                          )}
                           <div className="item-meta">
                             {act.status === 'completed' ? (
                               <span className="badge badge-completed">Completada</span>
+                            ) : act.status === 'submitted' ? (
+                              <span className="badge badge-pending" style={{ background: 'var(--primary-hover)' }}>Revisión Pendiente</span>
                             ) : (
-                              <span className={act.assignedTo ? "badge badge-pending" : "badge badge-unassigned"}>
-                                {act.assignedTo ? "En progreso" : "Sin asignar"}
+                              <span className={act.assignedTo ? "badge badge-pending" : "badge badge-unassigned"} style={isOverdue ? {background: 'var(--danger-color)', color: 'white'} : {}}>
+                                {isOverdue ? 'Vencida' : act.assignedTo ? "En progreso" : "Sin asignar"}
                               </span>
                             )}
                             
@@ -166,14 +289,69 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                               </span>
                             )}
                           </div>
+                          
+                          {/* Botones de Aprobación */}
+                          {act.status === 'submitted' && (
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                              <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }} onClick={() => handleApprove(act)}>
+                                <CheckCircle size={14} /> Aprobar
+                              </button>
+                              <button className="btn btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }} onClick={() => handleReturn(act)}>
+                                <XCircle size={14} /> Devolver
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <div className="item-actions">
                           <button 
                             className="btn-icon" 
+                            style={{ color: 'var(--text-secondary)' }}
+                            onClick={() => setEditActModal({
+                              ...act,
+                              deadline: act.deadline ? new Date(act.deadline).toISOString().slice(0, 16) : ''
+                            })}
+                            title="Editar"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button 
+                            className="btn-icon" 
                             style={{ color: 'var(--danger-color)' }}
                             onClick={() => handleDeleteActivity(act.id)}
+                            title="Eliminar"
                           >
                             <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    )})}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              {/* Rutinas */}
+              <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
+                <h3 className="card-title" style={{ marginBottom: '1rem' }}>
+                  <Copy size={20} style={{ marginRight: '0.5rem' }} /> Rutinas Guardadas
+                </h3>
+                {routines.length === 0 ? (
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No hay rutinas. Crea una actividad y marca "Guardar como Rutina".</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {routines.map(r => (
+                      <div key={r.id} style={{ background: 'var(--surface-color-light)', padding: '0.75rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h5 style={{ margin: 0 }}>{r.title}</h5>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.type === 'numerical' ? `Numérica: ${r.targetAmount}` : 'Normal'}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button className="btn-icon" style={{ color: 'var(--primary-color)' }} onClick={() => handleDeployRoutine(r)} title="Desplegar Actividad">
+                            <Play size={16} />
+                          </button>
+                          <button className="btn-icon" style={{ color: 'var(--danger-color)' }} onClick={() => handleDeleteRoutine(r.id)} title="Eliminar Rutina">
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
@@ -181,15 +359,12 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                   </div>
                 )}
               </div>
-            </div>
 
-            <div>
               <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
                 <h3 className="card-title" style={{ marginBottom: '1rem' }}>Invitar Ayudantes</h3>
                 <div className="join-code-box">
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Código del Proyecto</p>
                   <h3>{project.joinCode}</h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Comparte este código con tu equipo</p>
                 </div>
                 
                 <h4 style={{ marginBottom: '1rem', marginTop: '1.5rem', color: 'var(--text-secondary)' }}>
@@ -230,7 +405,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
       {/* Modal Nueva Actividad */}
       {showNewActModal && (
         <div className="modal-overlay">
-          <div className="modal-content glass-panel card animate-fade-in">
+          <div className="modal-content glass-panel card animate-fade-in" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <button className="modal-close" onClick={() => setShowNewActModal(false)}>✕</button>
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Nueva Actividad</h3>
             <form onSubmit={handleCreateActivity}>
@@ -248,10 +423,43 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                 <label>Descripción (opcional)</label>
                 <textarea 
                   className="input-field" 
-                  rows="3"
+                  rows="2"
                   value={newAct.description}
                   onChange={e => setNewAct({...newAct, description: e.target.value})}
                 ></textarea>
+              </div>
+              <div className="form-group">
+                <label>Tipo de Tarea</label>
+                <select 
+                  className="input-field select-field"
+                  value={newAct.type}
+                  onChange={e => setNewAct({...newAct, type: e.target.value})}
+                >
+                  <option value="normal">Normal (Checkbox)</option>
+                  <option value="numerical">Numérica (Cantidad)</option>
+                </select>
+              </div>
+              {newAct.type === 'numerical' && (
+                <div className="form-group">
+                  <label>Objetivo Numérico</label>
+                  <input 
+                    type="number" 
+                    className="input-field" 
+                    min="1"
+                    value={newAct.targetAmount}
+                    onChange={e => setNewAct({...newAct, targetAmount: e.target.value})}
+                    required
+                  />
+                </div>
+              )}
+              <div className="form-group">
+                <label>Fecha Límite (opcional)</label>
+                <input 
+                  type="datetime-local" 
+                  className="input-field" 
+                  value={newAct.deadline}
+                  onChange={e => setNewAct({...newAct, deadline: e.target.value})}
+                />
               </div>
               <div className="form-group">
                 <label>Asignar a (opcional)</label>
@@ -266,11 +474,86 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                   ))}
                 </select>
               </div>
-              <button type="submit" className="btn btn-primary">Crear Actividad</button>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input 
+                  type="checkbox" 
+                  id="saveRoutine"
+                  checked={newAct.saveAsRoutine}
+                  onChange={e => setNewAct({...newAct, saveAsRoutine: e.target.checked})}
+                />
+                <label htmlFor="saveRoutine" style={{ margin: 0 }}>Guardar en mis Rutinas</label>
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Crear Actividad</button>
             </form>
           </div>
         </div>
       )}
+
+      {/* Modal Editar Actividad */}
+      {editActModal && (
+        <div className="modal-overlay">
+          <div className="modal-content glass-panel card animate-fade-in" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <button className="modal-close" onClick={() => setEditActModal(null)}>✕</button>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>Editar Actividad</h3>
+            <form onSubmit={handleEditActivity}>
+              <div className="form-group">
+                <label>Título</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={editActModal.title}
+                  onChange={e => setEditActModal({...editActModal, title: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Descripción</label>
+                <textarea 
+                  className="input-field" 
+                  rows="2"
+                  value={editActModal.description || ''}
+                  onChange={e => setEditActModal({...editActModal, description: e.target.value})}
+                ></textarea>
+              </div>
+              <div className="form-group">
+                <label>Tipo de Tarea</label>
+                <select 
+                  className="input-field select-field"
+                  value={editActModal.type}
+                  onChange={e => setEditActModal({...editActModal, type: e.target.value})}
+                >
+                  <option value="normal">Normal (Checkbox)</option>
+                  <option value="numerical">Numérica (Cantidad)</option>
+                </select>
+              </div>
+              {editActModal.type === 'numerical' && (
+                <div className="form-group">
+                  <label>Objetivo Numérico</label>
+                  <input 
+                    type="number" 
+                    className="input-field" 
+                    min="1"
+                    value={editActModal.targetAmount || ''}
+                    onChange={e => setEditActModal({...editActModal, targetAmount: e.target.value})}
+                    required
+                  />
+                </div>
+              )}
+              <div className="form-group">
+                <label>Fecha Límite (opcional)</label>
+                <input 
+                  type="datetime-local" 
+                  className="input-field" 
+                  value={editActModal.deadline || ''}
+                  onChange={e => setEditActModal({...editActModal, deadline: e.target.value})}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>Guardar Cambios</button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

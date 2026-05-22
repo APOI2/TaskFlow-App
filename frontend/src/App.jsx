@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import Welcome from './pages/Welcome';
 import Dashboard from './pages/Dashboard';
 import ProjectView from './pages/ProjectView';
@@ -16,7 +17,7 @@ const NavigationBar = () => {
     <nav className="navbar">
       <div className="nav-brand">
         <Activity size={28} />
-        <span>TaskFlow</span>
+        <span>GTI katana</span>
       </div>
       <div className="user-info">
         <span>{user.name}</span>
@@ -82,9 +83,11 @@ const MainRouter = () => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <MainRouter />
-      </Router>
+      <ToastProvider>
+        <Router>
+          <MainRouter />
+        </Router>
+      </ToastProvider>
     </AuthProvider>
   );
 }

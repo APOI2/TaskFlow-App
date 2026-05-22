@@ -1,24 +1,88 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { dbService } from '../firebase';
 import { formatDistance } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CheckCircle, Clock, Layout } from 'lucide-react';
+import { CheckCircle, Clock, Send, Minus, Plus } from 'lucide-react';
+
+const ActivityItem = ({ act, onConfirm }) => {
+  const [localAmount, setLocalAmount] = useState(act.currentAmount || 0);
+
+  const handleConfirm = () => {
+    onConfirm(act, act.type === 'numerical' ? localAmount : null);
+  };
+
+  const isOverdue = act.deadline && Date.now() > act.deadline;
+
+  return (
+    <div className="list-item" style={{ flexDirection: 'column', gap: '1rem', border: isOverdue && act.status === 'pending' ? '1px solid var(--danger-color)' : 'none' }}>
+      <div className="item-content" style={{ width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <h4>{act.title}</h4>
+          {act.status === 'completed' && <span className="badge badge-completed">Completada</span>}
+          {act.status === 'submitted' && <span className="badge badge-pending" style={{ background: 'var(--primary-color)' }}>Enviada a Revisión</span>}
+          {act.status === 'pending' && !isOverdue && <span className="badge badge-pending">Pendiente</span>}
+          {act.status === 'pending' && isOverdue && <span className="badge badge-unassigned" style={{ background: 'var(--danger-color)', color: 'white' }}>Vencida</span>}
+        </div>
+        <p>{act.description || 'Sin descripción adicional.'}</p>
+        
+        <div className="item-meta" style={{ marginTop: '1rem', flexWrap: 'wrap' }}>
+          <span>
+            <Clock size={14} /> 
+            Asignada hace {formatDistance(new Date(act.createdAt), new Date(), { locale: es })}
+          </span>
+          {act.deadline && (
+            <span style={{ color: isOverdue && act.status === 'pending' ? 'var(--danger-color)' : 'var(--text-secondary)' }}>
+              Vence: {new Date(act.deadline).toLocaleString()}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {act.status === 'pending' && act.type === 'numerical' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-color-light)', padding: '0.5rem', borderRadius: '8px' }}>
+          <span>Objetivo: {act.targetAmount}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
+            <button className="btn-icon" onClick={() => setLocalAmount(Math.max(0, localAmount - 1))}><Minus size={16} /></button>
+            <span style={{ fontWeight: 'bold', width: '30px', textAlign: 'center' }}>{localAmount}</span>
+            <button className="btn-icon" onClick={() => setLocalAmount(localAmount + 1)}><Plus size={16} /></button>
+          </div>
+        </div>
+      )}
+
+      {act.status === 'pending' && (
+        <button 
+          className="btn btn-primary" 
+          style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: '0.5rem' }}
+          onClick={handleConfirm}
+        >
+          <Send size={18} /> Confirmar Tarea
+        </button>
+      )}
+      {act.status === 'completed' && act.timeTakenMs && (
+        <div style={{ width: '100%', textAlign: 'center', color: 'var(--success-color)', fontSize: '0.875rem' }}>
+          Completada en {Math.floor(act.timeTakenMs / 1000 / 60)} minutos
+        </div>
+      )}
+    </div>
+  );
+};
 
 const HelperDashboard = ({ projectId, project }) => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [activities, setActivities] = useState([]);
 
   useEffect(() => {
     if (projectId) {
       const unsubscribe = dbService.subscribeToActivities(projectId, (acts) => {
-        // Filtrar solo las asignadas a este ayudante
         const myActs = acts.filter(a => a.assignedTo === user.id);
-        
-        // Ordenar: Pendientes primero
         const sorted = myActs.sort((a, b) => {
           if (a.status === b.status) return b.createdAt - a.createdAt;
-          return a.status === 'pending' ? -1 : 1;
+          if (a.status === 'pending') return -1;
+          if (a.status === 'submitted') return 0;
+          return 1;
         });
         setActivities(sorted);
       });
@@ -28,11 +92,10 @@ const HelperDashboard = ({ projectId, project }) => {
     }
   }, [projectId, user.id]);
 
-  const handleCompleteActivity = async (act) => {
-    await dbService.completeActivity(act);
+  const handleConfirmActivity = async (act, finalAmount) => {
+    await dbService.submitActivity(act, finalAmount);
+    showToast('¡Tarea enviada para revisión!', 'success');
   };
-
-
 
   return (
     <div className="animate-fade-in">
@@ -56,41 +119,7 @@ const HelperDashboard = ({ projectId, project }) => {
         ) : (
           <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {activities.map(act => (
-              <div key={act.id} className="list-item" style={{ flexDirection: 'column', gap: '1rem' }}>
-                <div className="item-content" style={{ width: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <h4>{act.title}</h4>
-                    {act.status === 'completed' ? (
-                      <span className="badge badge-completed">Completada</span>
-                    ) : (
-                      <span className="badge badge-pending">Pendiente</span>
-                    )}
-                  </div>
-                  <p>{act.description || 'Sin descripción adicional.'}</p>
-                  
-                  <div className="item-meta" style={{ marginTop: '1rem' }}>
-                    <span>
-                      <Clock size={14} /> 
-                      Asignada hace {formatDistance(new Date(act.createdAt), new Date(), { locale: es })}
-                    </span>
-                  </div>
-                </div>
-
-                {act.status === 'pending' && (
-                  <button 
-                    className="btn btn-primary" 
-                    style={{ width: '100%' }}
-                    onClick={() => handleCompleteActivity(act)}
-                  >
-                    Marcar como Completada
-                  </button>
-                )}
-                {act.status === 'completed' && act.timeTakenMs && (
-                  <div style={{ width: '100%', textAlign: 'center', color: 'var(--success-color)', fontSize: '0.875rem' }}>
-                    Completada en {Math.floor(act.timeTakenMs / 1000 / 60)} minutos
-                  </div>
-                )}
-              </div>
+              <ActivityItem key={act.id} act={act} onConfirm={handleConfirmActivity} />
             ))}
           </div>
         )}
