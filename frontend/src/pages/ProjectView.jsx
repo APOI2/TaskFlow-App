@@ -57,7 +57,19 @@ const ProjectView = () => {
         <ArrowLeft size={20} style={{ marginRight: '0.5rem' }} /> Volver al Dashboard
       </button>
       {project.isLeader ? (
-        <LeaderDashboard projectId={id} project={project} onProjectDeleted={() => navigate('/dashboard')} />
+        <>
+          <LeaderDashboard 
+            projectId={id} 
+            project={project} 
+            onProjectDeleted={() => navigate('/dashboard')} 
+            onProjectUpdated={loadProject} 
+          />
+          {project.helpers?.some(h => h.id === user.id) && (
+            <div style={{ marginTop: '3rem', borderTop: '1px solid var(--surface-color-light)', paddingTop: '2rem' }}>
+              <HelperDashboard projectId={id} project={project} />
+            </div>
+          )}
+        </>
       ) : (
         <HelperDashboard projectId={id} project={project} />
       )}

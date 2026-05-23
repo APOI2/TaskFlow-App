@@ -10,6 +10,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [activities, setActivities] = useState([]); // These are now 'Objetivos'
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Modals / Forms
   const [showNewActModal, setShowNewActModal] = useState(false);
@@ -83,26 +84,42 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   };
 
   const handleDeleteProject = async () => {
+    if (isProcessing) return;
     if (window.confirm('¿ELIMINAR ACTIVIDAD? Esto borrará todos los objetivos y desconectará a los ayudantes. Se guardará en el historial como "borrada".')) {
-      await dbService.saveProjectHistory(user.id, project.name, 'borrada', { total: activities.length });
-      await dbService.deleteProject(project.id);
-      if (onProjectDeleted) onProjectDeleted();
+      setIsProcessing(true);
+      try {
+        await dbService.saveProjectHistory(user.id, project.name, 'borrada', { total: activities.length });
+        await dbService.deleteProject(project.id);
+        if (onProjectDeleted) onProjectDeleted();
+      } catch (error) {
+        console.error(error);
+        setIsProcessing(false);
+        showToast('Error al eliminar', 'error');
+      }
     }
   };
 
   const handleConcludeProject = async () => {
+    if (isProcessing) return;
     if (window.confirm('¿FINALIZAR ACTIVIDAD? Esto guardará la actividad en el historial según sus objetivos completados y la cerrará.')) {
-      const total = activities.length;
-      const completed = activities.filter(a => a.status === 'completed').length;
-      let outcome = 'ignorada';
-      if (total > 0) {
-        if (completed === total) outcome = 'exitosa';
-        else if (completed > 0) outcome = 'parcial';
+      setIsProcessing(true);
+      try {
+        const total = activities.length;
+        const completed = activities.filter(a => a.status === 'completed').length;
+        let outcome = 'ignorada';
+        if (total > 0) {
+          if (completed === total) outcome = 'exitosa';
+          else if (completed > 0) outcome = 'parcial';
+        }
+        
+        await dbService.saveProjectHistory(user.id, project.name, outcome, { total, completed });
+        await dbService.deleteProject(project.id);
+        if (onProjectDeleted) onProjectDeleted();
+      } catch (error) {
+        console.error(error);
+        setIsProcessing(false);
+        showToast('Error al finalizar', 'error');
       }
-      
-      await dbService.saveProjectHistory(user.id, project.name, outcome, { total, completed });
-      await dbService.deleteProject(project.id);
-      if (onProjectDeleted) onProjectDeleted();
     }
   };
 
@@ -217,13 +234,13 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
           <p>Gestiona esta actividad y monitorea el progreso de los objetivos</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn btn-secondary" onClick={handleSaveAsRoutine} title="Guardar como Rutina para futuro">
+          <button className="btn btn-secondary" onClick={handleSaveAsRoutine} title="Guardar como Rutina para futuro" disabled={isProcessing}>
             <Save size={20} /> Guardar Rutina
           </button>
-          <button className="btn btn-primary" onClick={handleConcludeProject} title="Finalizar Actividad y Guardar en Historial" style={{ background: 'var(--success-color)' }}>
-            <CheckCircle size={20} /> Finalizar
+          <button className="btn btn-primary" onClick={handleConcludeProject} title="Finalizar Actividad y Guardar en Historial" style={{ background: 'var(--success-color)', opacity: isProcessing ? 0.6 : 1 }} disabled={isProcessing}>
+            <CheckCircle size={20} /> {isProcessing ? 'Procesando...' : 'Finalizar'}
           </button>
-          <button className="btn btn-danger" onClick={handleDeleteProject} title="Eliminar Actividad">
+          <button className="btn btn-danger" onClick={handleDeleteProject} title="Eliminar Actividad" disabled={isProcessing} style={{ opacity: isProcessing ? 0.6 : 1 }}>
             <Trash2 size={20} /> Eliminar
           </button>
         </div>
