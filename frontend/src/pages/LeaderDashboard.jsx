@@ -271,40 +271,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                       const isOverdue = act.deadline && Date.now() > act.deadline;
                       const isEditing = editActModal && editActModal.id === act.id;
 
-                      if (isEditing) {
-                        return (
-                          <div key={act.id} className="list-item" style={{ flexDirection: 'column', gap: '1rem', background: 'var(--surface-color-light)', borderLeft: '4px solid var(--secondary-color)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <h4 style={{ margin: 0, color: 'var(--secondary-color)' }}>Editando: {act.title}</h4>
-                              <button className="btn-icon" onClick={() => setEditActModal(null)}><XCircle size={20} /></button>
-                            </div>
-                            <form onSubmit={handleEditActivity} style={{ width: '100%' }}>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                                <input type="text" className="input-field" value={editActModal.title} onChange={e => setEditActModal({...editActModal, title: e.target.value})} placeholder="Título del objetivo" required style={{ flex: '1 1 200px', padding: '0.5rem' }} />
-                                <select className="input-field select-field" value={editActModal.type} onChange={e => setEditActModal({...editActModal, type: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.5rem' }}>
-                                  <option value="normal">Normal</option>
-                                  <option value="numerical">Numérico</option>
-                                </select>
-                                {editActModal.type === 'numerical' && (
-                                  <input type="number" className="input-field" min="1" value={editActModal.targetAmount || ''} onChange={e => setEditActModal({...editActModal, targetAmount: e.target.value})} placeholder="Meta" required style={{ flex: '0 0 80px', padding: '0.5rem' }} />
-                                )}
-                                <input type="datetime-local" className="input-field" value={editActModal.deadline || ''} onChange={e => setEditActModal({...editActModal, deadline: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.5rem' }} title="Fecha límite" />
-                                <select className="input-field select-field" value={editActModal.assignedTo || ''} onChange={e => setEditActModal({...editActModal, assignedTo: e.target.value})} style={{ flex: '1 1 150px', padding: '0.5rem' }}>
-                                  <option value="">-- Sin asignar --</option>
-                                  {project?.helpers?.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-                                </select>
-                              </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <textarea className="input-field" rows="1" value={editActModal.description || ''} onChange={e => setEditActModal({...editActModal, description: e.target.value})} placeholder="Descripción (opcional)" style={{ flex: '1 1 100%', padding: '0.5rem', minHeight: '38px' }}></textarea>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <button type="button" className="btn btn-secondary" style={{ padding: '0.5rem 1rem', width: 'auto' }} onClick={() => setEditActModal(null)}>Cancelar</button>
-                                <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1rem', width: 'auto' }}>Guardar Cambios</button>
-                              </div>
-                            </form>
-                          </div>
-                        )
-                      }
+                      // Removed inline editing block to display it as a popup modal instead
 
                       return (
                       <div key={act.id} className="list-item" style={{ border: isOverdue && act.status === 'pending' ? '1px solid var(--danger-color)' : 'none', marginBottom: 0 }}>
@@ -435,6 +402,41 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
 
 
     </div>
+
+      {editActModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, color: 'var(--secondary-color)' }}>Editando: {editActModal.title}</h3>
+              <button className="btn-icon" onClick={() => setEditActModal(null)}><XCircle size={24} /></button>
+            </div>
+            <form onSubmit={handleEditActivity} style={{ width: '100%' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                <input type="text" className="input-field" value={editActModal.title} onChange={e => setEditActModal({...editActModal, title: e.target.value})} placeholder="Título del objetivo" required style={{ flex: '1 1 200px', padding: '0.75rem' }} />
+                <select className="input-field select-field" value={editActModal.type} onChange={e => setEditActModal({...editActModal, type: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.75rem' }}>
+                  <option value="normal">Normal</option>
+                  <option value="numerical">Numérico</option>
+                </select>
+                {editActModal.type === 'numerical' && (
+                  <input type="number" className="input-field" min="1" value={editActModal.targetAmount || ''} onChange={e => setEditActModal({...editActModal, targetAmount: e.target.value})} placeholder="Meta" required style={{ flex: '0 0 100px', padding: '0.75rem' }} />
+                )}
+                <input type="datetime-local" className="input-field" value={editActModal.deadline || ''} onChange={e => setEditActModal({...editActModal, deadline: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.75rem' }} title="Fecha límite" />
+                <select className="input-field select-field" value={editActModal.assignedTo || ''} onChange={e => setEditActModal({...editActModal, assignedTo: e.target.value})} style={{ flex: '1 1 150px', padding: '0.75rem' }}>
+                  <option value="">-- Sin asignar --</option>
+                  {project?.helpers?.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+                <textarea className="input-field" rows="2" value={editActModal.description || ''} onChange={e => setEditActModal({...editActModal, description: e.target.value})} placeholder="Descripción (opcional)" style={{ flex: '1 1 100%', padding: '0.75rem' }}></textarea>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditActModal(null)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Guardar Cambios</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
   );
 };
 

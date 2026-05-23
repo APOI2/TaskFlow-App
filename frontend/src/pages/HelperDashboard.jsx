@@ -106,6 +106,13 @@ const HelperDashboard = ({ projectId, project }) => {
         </div>
       </div>
 
+      {activities.filter(act => act.status === 'pending' && act.deadline && (act.deadline - Date.now() < 24 * 60 * 60 * 1000) && Date.now() < act.deadline).length > 0 && (
+        <div style={{ background: 'var(--primary-hover)', color: 'white', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Clock size={20} />
+          <span><strong>¡Atención!</strong> Tienes tareas cuya fecha límite se aproxima en menos de 24 horas.</span>
+        </div>
+      )}
+
       <div className="card glass-panel">
         <h3 className="card-title" style={{ marginBottom: '1.5rem' }}>
           Tareas Pendientes
