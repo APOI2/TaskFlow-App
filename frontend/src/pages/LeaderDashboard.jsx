@@ -233,39 +233,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* Inline Create Form */}
-                    {showNewActModal && (
-                      <div className="list-item" style={{ flexDirection: 'column', gap: '1rem', background: 'var(--surface-color-light)', borderLeft: '4px solid var(--primary-color)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <h4 style={{ margin: 0, color: 'var(--primary-color)' }}>Nuevo Objetivo</h4>
-                          <button className="btn-icon" onClick={() => setShowNewActModal(false)}><XCircle size={20} /></button>
-                        </div>
-                        <form onSubmit={handleCreateActivity} style={{ width: '100%' }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                            <input type="text" className="input-field" value={newAct.title} onChange={e => setNewAct({...newAct, title: e.target.value})} placeholder="Título del nuevo objetivo" required style={{ flex: '1 1 200px', padding: '0.5rem' }} />
-                            <select className="input-field select-field" value={newAct.type} onChange={e => setNewAct({...newAct, type: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.5rem' }}>
-                              <option value="normal">Normal</option>
-                              <option value="numerical">Numérico</option>
-                            </select>
-                            {newAct.type === 'numerical' && (
-                              <input type="number" className="input-field" min="1" value={newAct.targetAmount} onChange={e => setNewAct({...newAct, targetAmount: e.target.value})} placeholder="Meta" required style={{ flex: '0 0 80px', padding: '0.5rem' }} />
-                            )}
-                            <input type="datetime-local" className="input-field" value={newAct.deadline} onChange={e => setNewAct({...newAct, deadline: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.5rem' }} title="Fecha límite" />
-                            <select className="input-field select-field" value={newAct.assignedTo} onChange={e => setNewAct({...newAct, assignedTo: e.target.value})} style={{ flex: '1 1 150px', padding: '0.5rem' }}>
-                              <option value="">-- Sin asignar --</option>
-                              {project?.helpers?.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-                            </select>
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-                            <textarea className="input-field" rows="1" value={newAct.description} onChange={e => setNewAct({...newAct, description: e.target.value})} placeholder="Descripción (opcional)" style={{ flex: '1 1 100%', padding: '0.5rem', minHeight: '38px' }}></textarea>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-                            <button type="button" className="btn btn-secondary" style={{ padding: '0.5rem 1rem', width: 'auto' }} onClick={() => setShowNewActModal(false)}>Cancelar</button>
-                            <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1rem', width: 'auto' }}>Crear Objetivo</button>
-                          </div>
-                        </form>
-                      </div>
-                    )}
+                    {/* Removed inline create form, moved to popup modal below */}
 
                     {activities.map(act => {
                       const isOverdue = act.deadline && Date.now() > act.deadline;
@@ -402,6 +370,41 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
 
 
     </div>
+
+      {showNewActModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>Nuevo Objetivo</h3>
+              <button className="btn-icon" onClick={() => setShowNewActModal(false)}><XCircle size={24} /></button>
+            </div>
+            <form onSubmit={handleCreateActivity} style={{ width: '100%' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                <input type="text" className="input-field" value={newAct.title} onChange={e => setNewAct({...newAct, title: e.target.value})} placeholder="Título del nuevo objetivo" required style={{ flex: '1 1 200px', padding: '0.75rem' }} />
+                <select className="input-field select-field" value={newAct.type} onChange={e => setNewAct({...newAct, type: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.75rem' }}>
+                  <option value="normal">Normal</option>
+                  <option value="numerical">Numérico</option>
+                </select>
+                {newAct.type === 'numerical' && (
+                  <input type="number" className="input-field" min="1" value={newAct.targetAmount} onChange={e => setNewAct({...newAct, targetAmount: e.target.value})} placeholder="Meta" required style={{ flex: '0 0 100px', padding: '0.75rem' }} />
+                )}
+                <input type="datetime-local" className="input-field" value={newAct.deadline} onChange={e => setNewAct({...newAct, deadline: e.target.value})} style={{ flex: '0 0 auto', width: 'auto', padding: '0.75rem' }} title="Fecha límite" />
+                <select className="input-field select-field" value={newAct.assignedTo} onChange={e => setNewAct({...newAct, assignedTo: e.target.value})} style={{ flex: '1 1 150px', padding: '0.75rem' }}>
+                  <option value="">-- Sin asignar --</option>
+                  {project?.helpers?.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+                <textarea className="input-field" rows="2" value={newAct.description} onChange={e => setNewAct({...newAct, description: e.target.value})} placeholder="Descripción (opcional)" style={{ flex: '1 1 100%', padding: '0.75rem' }}></textarea>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowNewActModal(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Crear Objetivo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {editActModal && (
         <div className="modal-overlay">
