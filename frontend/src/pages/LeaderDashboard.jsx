@@ -83,7 +83,24 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   };
 
   const handleDeleteProject = async () => {
-    if (window.confirm('¿ELIMINAR ACTIVIDAD? Esto borrará todos los objetivos y desconectará a los ayudantes.')) {
+    if (window.confirm('¿ELIMINAR ACTIVIDAD? Esto borrará todos los objetivos y desconectará a los ayudantes. Se guardará en el historial como "borrada".')) {
+      await dbService.saveProjectHistory(user.id, project.name, 'borrada', { total: activities.length });
+      await dbService.deleteProject(project.id);
+      if (onProjectDeleted) onProjectDeleted();
+    }
+  };
+
+  const handleConcludeProject = async () => {
+    if (window.confirm('¿FINALIZAR ACTIVIDAD? Esto guardará la actividad en el historial según sus objetivos completados y la cerrará.')) {
+      const total = activities.length;
+      const completed = activities.filter(a => a.status === 'completed').length;
+      let outcome = 'ignorada';
+      if (total > 0) {
+        if (completed === total) outcome = 'exitosa';
+        else if (completed > 0) outcome = 'parcial';
+      }
+      
+      await dbService.saveProjectHistory(user.id, project.name, outcome, { total, completed });
       await dbService.deleteProject(project.id);
       if (onProjectDeleted) onProjectDeleted();
     }
@@ -192,7 +209,8 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
   };
 
   return (
-    <div className="animate-fade-in">
+    <>
+      <div className="animate-fade-in">
       <div className="dashboard-header">
         <div className="dashboard-title">
           <h2>Panel de Control de la Actividad: {project.name}</h2>
@@ -200,10 +218,13 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button className="btn btn-secondary" onClick={handleSaveAsRoutine} title="Guardar como Rutina para futuro">
-            <Save size={20} /> Guardar como Rutina
+            <Save size={20} /> Guardar Rutina
+          </button>
+          <button className="btn btn-primary" onClick={handleConcludeProject} title="Finalizar Actividad y Guardar en Historial" style={{ background: 'var(--success-color)' }}>
+            <CheckCircle size={20} /> Finalizar
           </button>
           <button className="btn btn-danger" onClick={handleDeleteProject} title="Eliminar Actividad">
-            <Trash2 size={20} /> Eliminar Actividad
+            <Trash2 size={20} /> Eliminar
           </button>
         </div>
       </div>
@@ -440,6 +461,7 @@ const LeaderDashboard = ({ projectId, project, onProjectDeleted }) => {
           </div>
         </div>
       )}
+    </>
   );
 };
 

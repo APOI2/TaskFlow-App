@@ -55,6 +55,7 @@ class LocalStore {
     if (!this.storage.getItem('activities')) this.storage.setItem('activities', JSON.stringify({}));
     if (!this.storage.getItem('users')) this.storage.setItem('users', JSON.stringify({}));
     if (!this.storage.getItem('projectRoutines')) this.storage.setItem('projectRoutines', JSON.stringify({}));
+    if (!this.storage.getItem('projectHistory')) this.storage.setItem('projectHistory', JSON.stringify({}));
   }
 
   // Helpers para simular las llamadas asíncronas de Firebase
@@ -405,6 +406,51 @@ export const dbService = {
       const acts = await localDb.query('activities', 'projectId', projectId);
       acts.docs.forEach(d => localDb.delete('activities', d.id));
       await localDb.delete('projects', projectId);
+    }
+  },
+
+  saveProjectHistory: async (leaderId, projectName, outcome, stats = {}) => {
+    const historyData = {
+      leaderId,
+      projectName,
+      outcome,
+      stats,
+      createdAt: Date.now()
+    };
+    if (isConfigured) {
+      await addDoc(collection(db, "projectHistory"), historyData);
+    } else {
+      await localDb.set('projectHistory', generateId(), historyData);
+    }
+  },
+
+  getProjectHistory: async (leaderId) => {
+    if (isConfigured) {
+      const q = query(collection(db, "projectHistory"), where("leaderId", "==", leaderId));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+    } else {
+      const q = await localDb.query('projectHistory', 'leaderId', leaderId);
+      return q.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+    }
+  },
+
+  deleteProjectHistoryItem: async (id) => {
+    if (isConfigured) {
+      await deleteDoc(doc(db, "projectHistory", id));
+    } else {
+      await localDb.delete('projectHistory', id);
+    }
+  },
+
+  clearProjectHistory: async (leaderId) => {
+    if (isConfigured) {
+      const q = query(collection(db, "projectHistory"), where("leaderId", "==", leaderId));
+      const snap = await getDocs(q);
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    } else {
+      const q = await localDb.query('projectHistory', 'leaderId', leaderId);
+      q.docs.forEach(d => localDb.delete('projectHistory', d.id));
     }
   }
 };

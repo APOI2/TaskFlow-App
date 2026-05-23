@@ -12,6 +12,7 @@ const Dashboard = () => {
   const [leaderProjects, setLeaderProjects] = useState([]);
   const [helperProjects, setHelperProjects] = useState([]);
   const [routines, setRoutines] = useState([]);
+  const [projectHistory, setProjectHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   
   const [showCreate, setShowCreate] = useState(false);
@@ -31,12 +32,14 @@ const Dashboard = () => {
   const loadAllProjects = async () => {
     try {
       setLoading(true);
-      const [lProj, hProj] = await Promise.all([
+      const [lProj, hProj, history] = await Promise.all([
         dbService.getProjectsForLeader(user.id),
-        dbService.getProjectsForHelper(user.id)
+        dbService.getProjectsForHelper(user.id),
+        dbService.getProjectHistory(user.id)
       ]);
       setLeaderProjects(lProj);
       setHelperProjects(hProj);
+      setProjectHistory(history);
     } catch (err) {
       console.error(err);
     } finally {
@@ -84,6 +87,22 @@ const Dashboard = () => {
     if (window.confirm('¿Seguro que deseas eliminar esta rutina guardada?')) {
       await dbService.deleteProjectRoutine(routineId);
       showToast('Rutina eliminada', 'success');
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (window.confirm('¿Seguro que deseas borrar TODO el historial de actividades?')) {
+      await dbService.clearProjectHistory(user.id);
+      setProjectHistory([]);
+      showToast('Historial borrado');
+    }
+  };
+
+  const handleDeleteHistoryItem = async (id) => {
+    if (window.confirm('¿Borrar este registro del historial?')) {
+      await dbService.deleteProjectHistoryItem(id);
+      setProjectHistory(prev => prev.filter(h => h.id !== id));
+      showToast('Registro borrado');
     }
   };
 
@@ -195,6 +214,55 @@ const Dashboard = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Historial Section */}
+      <div className="card glass-panel" style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 className="card-title" style={{ margin: 0 }}>Historial de Actividades Concluidas</h3>
+          {projectHistory.length > 0 && (
+            <button className="btn btn-danger" onClick={handleClearHistory} style={{ padding: '0.4rem 0.8rem', fontSize: '0.875rem' }}>
+              Limpiar Historial
+            </button>
+          )}
+        </div>
+        
+        {projectHistory.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)' }}>Aún no hay actividades en el historial.</p>
+        ) : (
+          <div className="grid-2">
+            {projectHistory.map(h => {
+              let badgeColor = 'var(--text-secondary)';
+              let label = h.outcome;
+              if (h.outcome === 'exitosa') { badgeColor = 'var(--success-color)'; label = 'Exitosa'; }
+              if (h.outcome === 'parcial') { badgeColor = 'var(--primary-color)'; label = 'Parcialmente Hecha'; }
+              if (h.outcome === 'ignorada') { badgeColor = 'var(--secondary-color)'; label = 'Ignorada'; }
+              if (h.outcome === 'borrada') { badgeColor = 'var(--danger-color)'; label = 'Borrada'; }
+
+              return (
+                <div key={h.id} className="list-item" style={{ borderLeft: `4px solid ${badgeColor}`, alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <h4 style={{ margin: '0 0 0.5rem 0' }}>{h.projectName}</h4>
+                      <span className="badge" style={{ background: badgeColor, color: 'white' }}>{label}</span>
+                    </div>
+                    {h.stats && h.stats.total !== undefined && (
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                        {h.stats.completed !== undefined ? `${h.stats.completed} de ` : ''}{h.stats.total} objetivos completados
+                      </p>
+                    )}
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                      Finalizada: {new Date(h.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button className="btn-icon" onClick={() => handleDeleteHistoryItem(h.id)} title="Eliminar registro" style={{ marginLeft: '1rem' }}>
+                    <Trash2 size={18} style={{ color: 'var(--danger-color)' }} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Modals */}
